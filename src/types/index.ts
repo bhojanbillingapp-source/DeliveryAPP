@@ -1,0 +1,42 @@
+export type MenuItem = {
+  id: number;
+  name: string;
+  item_name: string;
+  category_name: string | null;
+  item_type: string | null;
+  price: number | null;
+  is_active: boolean;
+};
+
+export type CartLine = {
+  item_id: number;
+  item_name: string;
+  price: number;
+  quantity: number;
+};
+
+export type Customer = {
+  customer_id: number;
+  name: string;
+  mobile: string;
+  outlet_id: string;
+};
+
+export type OrderSummary = {
+  order_id: number;
+  daily_order_no: number;
+  status: string;
+  total_amount: string;
+  payment_status: string;
+  payment_method: string;
+  created_at: string;
+};
+
+export type OrderItem = {
+  order_item_id: number;
+  item_id: number;
+  item_name: string;
+  quantity: number;
+  price: string;
+  status: string;
+};
