@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { View, Text, FlatList, StyleSheet, ActivityIndicator, RefreshControl } from 'react-native';
+import { View, Text, FlatList, StyleSheet, ActivityIndicator, RefreshControl, TouchableOpacity } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import api from '../api/client';
 import ScreenHeader from '../components/ScreenHeader';
@@ -64,6 +64,15 @@ export default function OrderDetailScreen({ navigation, route }: Props) {
               <Text style={styles.statusText}>{STATUS_LABELS[order.status] || order.status}</Text>
               <Text style={styles.meta}>Payment: {order.payment_method} · {order.payment_status}</Text>
               <Text style={styles.meta}>Placed {new Date(order.created_at).toLocaleString()}</Text>
+              {order.status === 'OPEN' && (
+                <TouchableOpacity
+                  style={styles.trackButton}
+                  activeOpacity={0.85}
+                  onPress={() => navigation.navigate('TrackOrder', { orderId: order.order_id })}
+                >
+                  <Text style={styles.trackButtonText}>📍 Track order</Text>
+                </TouchableOpacity>
+              )}
             </View>
           }
           renderItem={({ item }) => (
@@ -101,6 +110,8 @@ const styles = StyleSheet.create({
   badgeText: { fontWeight: '700', fontSize: 11, textTransform: 'capitalize' },
   statusText: { fontSize: 15, color: colors.primary, fontWeight: '600', marginTop: spacing.sm },
   meta: { fontSize: 13, color: colors.textMuted, marginTop: 4 },
+  trackButton: { backgroundColor: colors.accent, borderRadius: radius.sm, padding: 12, alignItems: 'center', marginTop: spacing.sm },
+  trackButtonText: { color: '#fff', fontWeight: '700' },
   row: {
     flexDirection: 'row',
     justifyContent: 'space-between',

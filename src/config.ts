@@ -1,8 +1,8 @@
 // This app instance is pinned to one restaurant outlet, matching the
 // per-restaurant deployment model — set OUTLET_ID in .env to that
 // restaurant's bbs.clients.client_id before building for a given outlet.
-import { OUTLET_ID } from '@env';
-export { OUTLET_ID };
+import { OUTLET_ID as ENV_OUTLET_ID } from '@env';
+export const OUTLET_ID: string = ENV_OUTLET_ID;
 
 // 10.0.2.2 is the Android emulator's alias for the host machine's localhost.
 // Point this at your machine's LAN IP (e.g. http://192.168.1.5:8080) when

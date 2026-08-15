@@ -6,10 +6,15 @@ import { useAuth } from '../context/AuthContext';
 import { CartProvider } from '../context/CartContext';
 import LoginScreen from '../screens/LoginScreen';
 import SignupScreen from '../screens/SignupScreen';
+import ForgotPasswordScreen from '../screens/ForgotPasswordScreen';
 import MenuScreen from '../screens/MenuScreen';
 import CartScreen from '../screens/CartScreen';
 import OrdersScreen from '../screens/OrdersScreen';
 import OrderDetailScreen from '../screens/OrderDetailScreen';
+import AddressListScreen from '../screens/AddressListScreen';
+import AddressFormScreen from '../screens/AddressFormScreen';
+import TrackOrderScreen from '../screens/TrackOrderScreen';
+import ProfileScreen from '../screens/ProfileScreen';
 import type { AppStackParamList, AuthStackParamList } from './types';
 import { colors } from '../theme';
 
@@ -17,11 +22,11 @@ const AuthStack = createNativeStackNavigator<AuthStackParamList>();
 const AppStack = createNativeStackNavigator<AppStackParamList>();
 
 export default function RootNavigator() {
-  const { customer, isLoading } = useAuth();
+  const { customer, isLoading: authLoading } = useAuth();
 
-  if (isLoading) {
+  if (authLoading) {
     return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.background }}>
         <ActivityIndicator size="large" color={colors.primary} />
       </View>
     );
@@ -36,12 +41,17 @@ export default function RootNavigator() {
             <AppStack.Screen name="Cart" component={CartScreen} />
             <AppStack.Screen name="Orders" component={OrdersScreen} />
             <AppStack.Screen name="OrderDetail" component={OrderDetailScreen} />
+            <AppStack.Screen name="AddressList" component={AddressListScreen} />
+            <AppStack.Screen name="AddressForm" component={AddressFormScreen} />
+            <AppStack.Screen name="TrackOrder" component={TrackOrderScreen} />
+            <AppStack.Screen name="Profile" component={ProfileScreen} />
           </AppStack.Navigator>
         </CartProvider>
       ) : (
         <AuthStack.Navigator screenOptions={{ headerShown: false }}>
           <AuthStack.Screen name="Login" component={LoginScreen} />
           <AuthStack.Screen name="Signup" component={SignupScreen} />
+          <AuthStack.Screen name="ForgotPassword" component={ForgotPasswordScreen} />
         </AuthStack.Navigator>
       )}
     </NavigationContainer>

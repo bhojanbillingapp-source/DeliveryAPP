@@ -1,31 +1,67 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { View, Text, FlatList, TouchableOpacity, StyleSheet, TextInput, ActivityIndicator, Alert } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useFocusEffect } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import api from '../api/client';
+import { listAddresses } from '../api/addresses';
 import { useCart } from '../context/CartContext';
 import ScreenHeader from '../components/ScreenHeader';
 import type { AppStackParamList } from '../navigation/types';
+import type { Address } from '../types';
 import { colors, radius, spacing } from '../theme';
 
 type Props = NativeStackScreenProps<AppStackParamList, 'Cart'>;
 
 const HIT_SLOP = { top: 8, bottom: 8, left: 8, right: 8 };
 
-export default function CartScreen({ navigation }: Props) {
+export default function CartScreen({ navigation, route }: Props) {
   const insets = useSafeAreaInsets();
   const { lines, incrementItem, decrementItem, removeItem, total, clear } = useCart();
-  const [landmark, setLandmark] = useState('');
+  const [note, setNote] = useState('');
   const [placing, setPlacing] = useState(false);
+  const [addresses, setAddresses] = useState<Address[]>([]);
+  const [selectedAddressId, setSelectedAddressId] = useState<number | null>(null);
+
+  useFocusEffect(
+    React.useCallback(() => {
+      let cancelled = false;
+      (async () => {
+        const data = await listAddresses();
+        if (cancelled) return;
+        setAddresses(data);
+        setSelectedAddressId(prev => prev ?? data.find(a => a.is_default)?.address_id ?? data[0]?.address_id ?? null);
+      })();
+      return () => {
+        cancelled = true;
+      };
+    }, [])
+  );
+
+  useEffect(() => {
+    if (route.params?.selectedAddressId != null) {
+      setSelectedAddressId(route.params.selectedAddressId);
+    }
+  }, [route.params?.selectedAddressId]);
+
+  const selectedAddress = addresses.find(a => a.address_id === selectedAddressId) || null;
 
   async function placeOrder() {
     if (!lines.length) return;
+    if (!selectedAddressId) {
+      Alert.alert('Add a delivery address', 'Add and select an address before placing your order.', [
+        { text: 'Add address', onPress: () => navigation.navigate('AddressList', { selectMode: true }) },
+        { text: 'Cancel', style: 'cancel' },
+      ]);
+      return;
+    }
     setPlacing(true);
     try {
       const { data } = await api.post('/customer-orders/orders', {
         items: lines.map(l => ({ item_id: l.item_id, quantity: l.quantity })),
         payment_method: 'COD',
-        delivery_landmark: landmark.trim() || undefined,
+        address_id: selectedAddressId,
+        delivery_landmark: note.trim() || undefined,
       });
       clear();
       Alert.alert('Order placed!', `Order #${data.daily_order_no} — pay ₹${data.total_amount} on delivery.`, [
@@ -71,12 +107,29 @@ export default function CartScreen({ navigation }: Props) {
 
       {lines.length > 0 && (
         <View style={[styles.footer, { paddingBottom: spacing.md + insets.bottom }]}>
+          <TouchableOpacity
+            style={styles.addressCard}
+            activeOpacity={0.8}
+            onPress={() => navigation.navigate('AddressList', { selectMode: true })}
+          >
+            {selectedAddress ? (
+              <View style={{ flex: 1 }}>
+                <Text style={styles.addressLabel}>Deliver to: {selectedAddress.label}</Text>
+                <Text style={styles.addressText} numberOfLines={2}>
+                  {[selectedAddress.address_line1, selectedAddress.city].filter(Boolean).join(', ')}
+                </Text>
+              </View>
+            ) : (
+              <Text style={styles.addressLabel}>+ Add a delivery address</Text>
+            )}
+            <Text style={styles.changeText}>Change</Text>
+          </TouchableOpacity>
           <TextInput
             style={styles.input}
-            placeholder="Delivery landmark (optional)"
+            placeholder="Delivery note, e.g. ring the bell (optional)"
             placeholderTextColor={colors.textMuted}
-            value={landmark}
-            onChangeText={setLandmark}
+            value={note}
+            onChangeText={setNote}
           />
           <View style={styles.totalRow}>
             <Text style={styles.total}>Total</Text>
@@ -133,6 +186,19 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: colors.border,
   },
+  addressCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.sm,
+    padding: 12,
+    marginBottom: spacing.md,
+  },
+  addressLabel: { fontSize: 14, fontWeight: '700', color: colors.text },
+  addressText: { fontSize: 12, color: colors.textMuted, marginTop: 2 },
+  changeText: { color: colors.primary, fontWeight: '700', fontSize: 13 },
   input: {
     borderWidth: 1,
     borderColor: colors.border,

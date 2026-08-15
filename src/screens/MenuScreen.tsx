@@ -14,7 +14,6 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import api from '../api/client';
 import { OUTLET_ID } from '../config';
 import { useCart } from '../context/CartContext';
-import { useAuth } from '../context/AuthContext';
 import type { AppStackParamList } from '../navigation/types';
 import type { MenuItem } from '../types';
 import { colors, radius, spacing } from '../theme';
@@ -25,7 +24,6 @@ const UNCATEGORIZED = 'Other';
 
 export default function MenuScreen({ navigation }: Props) {
   const insets = useSafeAreaInsets();
-  const { logout } = useAuth();
   const { lines, addItem, incrementItem, decrementItem, itemCount, total } = useCart();
   const [items, setItems] = useState<MenuItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -93,8 +91,8 @@ export default function MenuScreen({ navigation }: Props) {
           <TouchableOpacity onPress={() => navigation.navigate('Orders')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} style={styles.ordersBtn}>
             <Text style={styles.ordersBtnText}>My Orders</Text>
           </TouchableOpacity>
-          <TouchableOpacity onPress={logout} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-            <Text style={styles.headerLinkMuted}>Log Out</Text>
+          <TouchableOpacity onPress={() => navigation.navigate('Profile')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+            <Text style={styles.headerLinkMuted}>Profile</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -205,7 +203,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
   },
   ordersBtnText: { color: colors.primary, fontWeight: '600', fontSize: 13 },
-  headerLinkMuted: { color: colors.danger, fontWeight: '600', fontSize: 13 },
+  headerLinkMuted: { color: colors.primary, fontWeight: '600', fontSize: 13 },
   searchWrap: {
     backgroundColor: colors.surface,
     paddingHorizontal: spacing.md,

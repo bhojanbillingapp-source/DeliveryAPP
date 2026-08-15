@@ -10,6 +10,7 @@ type AuthContextValue = {
   login: (mobile: string, password: string) => Promise<void>;
   signup: (name: string, mobile: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
+  updateCustomer: (customer: Customer) => Promise<void>;
 };
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
@@ -20,12 +21,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     (async () => {
-      const stored = await AsyncStorage.getItem(CUSTOMER_STORAGE_KEY);
-      const token = await AsyncStorage.getItem(TOKEN_STORAGE_KEY);
-      if (stored && token) {
-        setCustomer(JSON.parse(stored));
+      try {
+        const stored = await AsyncStorage.getItem(CUSTOMER_STORAGE_KEY);
+        const token = await AsyncStorage.getItem(TOKEN_STORAGE_KEY);
+        if (stored && token) {
+          setCustomer(JSON.parse(stored));
+        }
+      } finally {
+        setIsLoading(false);
       }
-      setIsLoading(false);
     })();
   }, []);
 
@@ -59,8 +63,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setCustomer(null);
   }
 
+  async function updateCustomer(nextCustomer: Customer) {
+    await AsyncStorage.setItem(CUSTOMER_STORAGE_KEY, JSON.stringify(nextCustomer));
+    setCustomer(nextCustomer);
+  }
+
   return (
-    <AuthContext.Provider value={{ customer, isLoading, login, signup, logout }}>
+    <AuthContext.Provider value={{ customer, isLoading, login, signup, logout, updateCustomer }}>
       {children}
     </AuthContext.Provider>
   );

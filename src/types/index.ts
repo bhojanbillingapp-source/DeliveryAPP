@@ -32,6 +32,20 @@ export type OrderSummary = {
   created_at: string;
 };
 
+export type Address = {
+  address_id: number;
+  label: string;
+  address_line1: string;
+  address_line2: string | null;
+  city: string | null;
+  state: string | null;
+  pin_code: string | null;
+  landmark: string | null;
+  latitude: number;
+  longitude: number;
+  is_default: boolean;
+};
+
 export type OrderItem = {
   order_item_id: number;
   item_id: number;
