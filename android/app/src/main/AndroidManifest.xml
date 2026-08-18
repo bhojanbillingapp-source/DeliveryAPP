@@ -13,6 +13,13 @@
       android:theme="@style/AppTheme"
       android:usesCleartextTraffic="${usesCleartextTraffic}"
       android:supportsRtl="true">
+      <!-- react-native-maps (Android uses Google Maps by default) needs this
+           key at the native level — set MAPS_API_KEY in android/local.properties
+           (see local.properties.example) and rebuild; it can't be supplied via
+           the JS-side .env/react-native-dotenv. -->
+      <meta-data
+        android:name="com.google.android.geo.API_KEY"
+        android:value="${MAPS_API_KEY}" />
       <activity
         android:name=".MainActivity"
         android:label="@string/app_name"

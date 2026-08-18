@@ -23,6 +23,10 @@ export default function AddressListScreen({ navigation, route }: Props) {
         try {
           const data = await listAddresses();
           if (!cancelled) setAddresses(data);
+        } catch (err: any) {
+          if (!cancelled) {
+            Alert.alert('Could not load addresses', err?.response?.data?.message || 'Something went wrong.');
+          }
         } finally {
           if (!cancelled) setLoading(false);
         }

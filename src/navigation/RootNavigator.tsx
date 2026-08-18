@@ -13,6 +13,7 @@ import OrdersScreen from '../screens/OrdersScreen';
 import OrderDetailScreen from '../screens/OrderDetailScreen';
 import AddressListScreen from '../screens/AddressListScreen';
 import AddressFormScreen from '../screens/AddressFormScreen';
+import MapPickerScreen from '../screens/MapPickerScreen';
 import TrackOrderScreen from '../screens/TrackOrderScreen';
 import ProfileScreen from '../screens/ProfileScreen';
 import type { AppStackParamList, AuthStackParamList } from './types';
@@ -43,6 +44,7 @@ export default function RootNavigator() {
             <AppStack.Screen name="OrderDetail" component={OrderDetailScreen} />
             <AppStack.Screen name="AddressList" component={AddressListScreen} />
             <AppStack.Screen name="AddressForm" component={AddressFormScreen} />
+            <AppStack.Screen name="MapPicker" component={MapPickerScreen} />
             <AppStack.Screen name="TrackOrder" component={TrackOrderScreen} />
             <AppStack.Screen name="Profile" component={ProfileScreen} />
           </AppStack.Navigator>

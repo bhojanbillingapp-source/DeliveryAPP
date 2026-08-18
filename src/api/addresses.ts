@@ -9,8 +9,8 @@ export type AddressInput = {
   state?: string;
   pin_code?: string;
   landmark?: string;
-  latitude: number;
-  longitude: number;
+  latitude?: number;
+  longitude?: number;
   is_default?: boolean;
 };
 

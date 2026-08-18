@@ -138,6 +138,15 @@ export default function ProfileScreen({ navigation }: Props) {
           )}
         </View>
 
+        <TouchableOpacity
+          style={styles.card}
+          onPress={() => navigation.navigate('AddressList')}
+          activeOpacity={0.85}
+        >
+          <Text style={styles.fieldLabel}>Delivery addresses</Text>
+          <Text style={styles.linkAccent}>Manage delivery addresses</Text>
+        </TouchableOpacity>
+
         <TouchableOpacity style={styles.logoutButton} onPress={logout} activeOpacity={0.85}>
           <Text style={styles.logoutButtonText}>Log Out</Text>
         </TouchableOpacity>

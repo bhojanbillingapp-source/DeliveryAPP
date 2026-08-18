@@ -17,7 +17,7 @@ const HIT_SLOP = { top: 8, bottom: 8, left: 8, right: 8 };
 
 export default function CartScreen({ navigation, route }: Props) {
   const insets = useSafeAreaInsets();
-  const { lines, incrementItem, decrementItem, removeItem, total, clear } = useCart();
+  const { lines, incrementLine, decrementLine, removeLine, total, clear } = useCart();
   const [note, setNote] = useState('');
   const [placing, setPlacing] = useState(false);
   const [addresses, setAddresses] = useState<Address[]>([]);
@@ -27,10 +27,16 @@ export default function CartScreen({ navigation, route }: Props) {
     React.useCallback(() => {
       let cancelled = false;
       (async () => {
-        const data = await listAddresses();
-        if (cancelled) return;
-        setAddresses(data);
-        setSelectedAddressId(prev => prev ?? data.find(a => a.is_default)?.address_id ?? data[0]?.address_id ?? null);
+        try {
+          const data = await listAddresses();
+          if (cancelled) return;
+          setAddresses(data);
+          setSelectedAddressId(prev => prev ?? data.find(a => a.is_default)?.address_id ?? data[0]?.address_id ?? null);
+        } catch (err: any) {
+          if (!cancelled) {
+            Alert.alert('Could not load addresses', err?.response?.data?.message || 'Something went wrong.');
+          }
+        }
       })();
       return () => {
         cancelled = true;
@@ -58,7 +64,12 @@ export default function CartScreen({ navigation, route }: Props) {
     setPlacing(true);
     try {
       const { data } = await api.post('/customer-orders/orders', {
-        items: lines.map(l => ({ item_id: l.item_id, quantity: l.quantity })),
+        items: lines.map(l => ({
+          item_id: l.item_id,
+          quantity: l.quantity,
+          variant_label: l.variant_label,
+          cooking_note: l.note,
+        })),
         payment_method: 'COD',
         address_id: selectedAddressId,
         delivery_landmark: note.trim() || undefined,
@@ -80,23 +91,25 @@ export default function CartScreen({ navigation, route }: Props) {
 
       <FlatList
         data={lines}
-        keyExtractor={l => String(l.item_id)}
+        keyExtractor={l => l.cart_key}
         contentContainerStyle={{ padding: spacing.md }}
         renderItem={({ item }) => (
           <View style={styles.card}>
             <View style={{ flex: 1 }}>
               <Text style={styles.itemName}>{item.item_name}</Text>
+              {!!item.variant_label && <Text style={styles.itemVariant}>{item.variant_label}</Text>}
+              {!!item.note && <Text style={styles.itemNote}>Note: {item.note}</Text>}
               <Text style={styles.itemPrice}>₹{item.price} × {item.quantity} = ₹{(item.price * item.quantity).toFixed(2)}</Text>
-              <TouchableOpacity onPress={() => removeItem(item.item_id)} hitSlop={HIT_SLOP} style={styles.removeTouch}>
+              <TouchableOpacity onPress={() => removeLine(item.cart_key)} hitSlop={HIT_SLOP} style={styles.removeTouch}>
                 <Text style={styles.remove}>Remove</Text>
               </TouchableOpacity>
             </View>
             <View style={styles.qtyControls}>
-              <TouchableOpacity style={styles.qtyButton} onPress={() => decrementItem(item.item_id)} hitSlop={HIT_SLOP}>
+              <TouchableOpacity style={styles.qtyButton} onPress={() => decrementLine(item.cart_key)} hitSlop={HIT_SLOP}>
                 <Text style={styles.qtyButtonText}>−</Text>
               </TouchableOpacity>
               <Text style={styles.qtyValue}>{item.quantity}</Text>
-              <TouchableOpacity style={styles.qtyButton} onPress={() => incrementItem(item.item_id)} hitSlop={HIT_SLOP}>
+              <TouchableOpacity style={styles.qtyButton} onPress={() => incrementLine(item.cart_key)} hitSlop={HIT_SLOP}>
                 <Text style={styles.qtyButtonText}>+</Text>
               </TouchableOpacity>
             </View>
@@ -163,6 +176,8 @@ const styles = StyleSheet.create({
     marginBottom: spacing.sm,
   },
   itemName: { fontSize: 16, fontWeight: '700', color: colors.text },
+  itemVariant: { fontSize: 13, color: colors.primary, fontWeight: '600', marginTop: 2 },
+  itemNote: { fontSize: 12, color: colors.textMuted, fontStyle: 'italic', marginTop: 2 },
   itemPrice: { fontSize: 13, color: colors.textMuted, marginTop: 4 },
   removeTouch: { alignSelf: 'flex-start', marginTop: spacing.xs },
   remove: { color: colors.danger, fontSize: 12, fontWeight: '600' },

@@ -5,7 +5,7 @@ import { API_BASE_URL } from '../config';
 export const TOKEN_STORAGE_KEY = 'customer_access_token';
 export const CUSTOMER_STORAGE_KEY = 'customer_profile';
 
-const api = axios.create({ baseURL: API_BASE_URL });
+const api = axios.create({ baseURL: API_BASE_URL, timeout: 15000 });
 
 api.interceptors.request.use(async config => {
   const token = await AsyncStorage.getItem(TOKEN_STORAGE_KEY);
@@ -14,5 +14,24 @@ api.interceptors.request.use(async config => {
   }
   return config;
 });
+
+// Access tokens expire (15m by default) and there's no refresh-token flow —
+// AuthProvider registers a handler here so a 401 anywhere clears the stale
+// session and drops the user back to the login screen instead of leaving
+// them stuck looking at a raw "Invalid or expired token" error.
+let onUnauthorized: (() => void) | null = null;
+export function setUnauthorizedHandler(handler: (() => void) | null) {
+  onUnauthorized = handler;
+}
+
+api.interceptors.response.use(
+  response => response,
+  error => {
+    if (error?.response?.status === 401 && onUnauthorized) {
+      onUnauthorized();
+    }
+    return Promise.reject(error);
+  }
+);
 
 export default api;

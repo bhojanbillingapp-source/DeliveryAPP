@@ -22,7 +22,13 @@ export default function LoginScreen({ navigation }: Props) {
     try {
       await login(mobile.trim(), password);
     } catch (err: any) {
-      Alert.alert('Login failed', err?.response?.data?.message || 'Something went wrong.');
+      const message = err?.response?.data?.message
+        || (err?.code === 'ECONNABORTED'
+          ? 'Could not reach the server. Check your connection and try again.'
+          : err?.message === 'Network Error'
+          ? 'Could not reach the server. Check your connection and try again.'
+          : 'Something went wrong.');
+      Alert.alert('Login failed', message);
     } finally {
       setLoading(false);
     }

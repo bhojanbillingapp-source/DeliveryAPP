@@ -1,3 +1,9 @@
+export type MenuItemVariant = {
+  label: string;
+  price: number;
+  sufficient_for: number | null;
+};
+
 export type MenuItem = {
   id: number;
   name: string;
@@ -6,13 +12,20 @@ export type MenuItem = {
   item_type: string | null;
   price: number | null;
   is_active: boolean;
+  variants?: MenuItemVariant[];
 };
 
+// cart_key is `${item_id}::${variant_label ?? 'default'}` — an item ordered
+// in two different variants (e.g. Full vs Half) needs two distinct lines, so
+// item_id alone can't key the cart once variants are involved.
 export type CartLine = {
+  cart_key: string;
   item_id: number;
   item_name: string;
   price: number;
   quantity: number;
+  variant_label?: string;
+  note?: string;
 };
 
 export type Customer = {

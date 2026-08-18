@@ -1,12 +1,12 @@
 import React, { createContext, useContext, useMemo, useState } from 'react';
-import type { CartLine, MenuItem } from '../types';
+import type { CartLine, MenuItem, MenuItemVariant } from '../types';
 
 type CartContextValue = {
   lines: CartLine[];
-  addItem: (item: MenuItem) => void;
-  incrementItem: (itemId: number) => void;
-  decrementItem: (itemId: number) => void;
-  removeItem: (itemId: number) => void;
+  addItem: (item: MenuItem, note?: string, variant?: MenuItemVariant) => void;
+  incrementLine: (cartKey: string) => void;
+  decrementLine: (cartKey: string) => void;
+  removeLine: (cartKey: string) => void;
   clear: () => void;
   total: number;
   itemCount: number;
@@ -17,31 +17,44 @@ const CartContext = createContext<CartContextValue | undefined>(undefined);
 export function CartProvider({ children }: { children: React.ReactNode }) {
   const [lines, setLines] = useState<CartLine[]>([]);
 
-  function addItem(item: MenuItem) {
-    if (item.price == null) return;
+  function addItem(item: MenuItem, note = '', variant?: MenuItemVariant) {
+    const price = variant?.price ?? item.price;
+    if (price == null) return;
+    const cartKey = `${item.id}::${variant?.label ?? 'default'}`;
     setLines(prev => {
-      const existing = prev.find(l => l.item_id === item.id);
+      const existing = prev.find(l => l.cart_key === cartKey);
       if (existing) {
-        return prev.map(l => (l.item_id === item.id ? { ...l, quantity: l.quantity + 1 } : l));
+        return prev.map(l => (l.cart_key === cartKey ? { ...l, quantity: l.quantity + 1 } : l));
       }
-      return [...prev, { item_id: item.id, item_name: item.item_name, price: item.price as number, quantity: 1 }];
+      return [
+        ...prev,
+        {
+          cart_key: cartKey,
+          item_id: item.id,
+          item_name: item.item_name,
+          price,
+          quantity: 1,
+          variant_label: variant?.label,
+          note: note.trim() || undefined,
+        },
+      ];
     });
   }
 
-  function incrementItem(itemId: number) {
-    setLines(prev => prev.map(l => (l.item_id === itemId ? { ...l, quantity: l.quantity + 1 } : l)));
+  function incrementLine(cartKey: string) {
+    setLines(prev => prev.map(l => (l.cart_key === cartKey ? { ...l, quantity: l.quantity + 1 } : l)));
   }
 
-  function decrementItem(itemId: number) {
+  function decrementLine(cartKey: string) {
     setLines(prev =>
       prev
-        .map(l => (l.item_id === itemId ? { ...l, quantity: l.quantity - 1 } : l))
+        .map(l => (l.cart_key === cartKey ? { ...l, quantity: l.quantity - 1 } : l))
         .filter(l => l.quantity > 0)
     );
   }
 
-  function removeItem(itemId: number) {
-    setLines(prev => prev.filter(l => l.item_id !== itemId));
+  function removeLine(cartKey: string) {
+    setLines(prev => prev.filter(l => l.cart_key !== cartKey));
   }
 
   function clear() {
@@ -52,7 +65,9 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
   const itemCount = useMemo(() => lines.reduce((sum, l) => sum + l.quantity, 0), [lines]);
 
   return (
-    <CartContext.Provider value={{ lines, addItem, incrementItem, decrementItem, removeItem, clear, total, itemCount }}>
+    <CartContext.Provider
+      value={{ lines, addItem, incrementLine, decrementLine, removeLine, clear, total, itemCount }}
+    >
       {children}
     </CartContext.Provider>
   );

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -47,6 +47,12 @@ export default function AddressFormScreen({ navigation, route }: Props) {
   const [locating, setLocating] = useState(false);
   const [saving, setSaving] = useState(false);
 
+  useEffect(() => {
+    if (route.params?.pickedCoords) {
+      setCoords(route.params.pickedCoords);
+    }
+  }, [route.params?.pickedCoords]);
+
   async function useCurrentLocation() {
     const allowed = await requestLocationPermission();
     if (!allowed) {
@@ -72,8 +78,11 @@ export default function AddressFormScreen({ navigation, route }: Props) {
       Alert.alert('Address required', 'Enter your address (house/flat, street, area).');
       return;
     }
-    if (!coords) {
-      Alert.alert('Location required', 'Tap "Use current location" so we can confirm this address is within delivery range.');
+    if (!coords && !city.trim() && !state.trim() && !pinCode.trim()) {
+      Alert.alert(
+        'Location required',
+        'Tap "Use current location", or fill in city, state and PIN code so we can look up this address.'
+      );
       return;
     }
     setSaving(true);
@@ -86,8 +95,8 @@ export default function AddressFormScreen({ navigation, route }: Props) {
         state: state.trim() || undefined,
         pin_code: pinCode.trim() || undefined,
         landmark: landmark.trim() || undefined,
-        latitude: coords.latitude,
-        longitude: coords.longitude,
+        latitude: coords?.latitude,
+        longitude: coords?.longitude,
         is_default: isDefault,
       };
       if (editing) {
@@ -167,6 +176,18 @@ export default function AddressFormScreen({ navigation, route }: Props) {
             </Text>
           )}
         </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.locationButton, styles.mapPickButton]}
+          onPress={() => navigation.navigate('MapPicker', { initialCoords: coords ?? undefined })}
+          activeOpacity={0.85}
+        >
+          <Text style={styles.locationButtonText}>🗺️ Pick on map</Text>
+        </TouchableOpacity>
+        {!coords && (
+          <Text style={styles.locationHint}>
+            No GPS? Pick your location on the map, or fill in city, state and PIN code above and we'll look it up for you.
+          </Text>
+        )}
 
         <View style={styles.switchRow}>
           <Text style={styles.fieldLabel}>Set as default address</Text>
@@ -207,6 +228,8 @@ const styles = StyleSheet.create({
     marginBottom: spacing.sm,
   },
   locationButtonText: { color: colors.primary, fontWeight: '700' },
+  mapPickButton: { marginTop: -spacing.xs },
+  locationHint: { fontSize: 12, color: colors.textMuted, marginTop: -spacing.xs, marginBottom: spacing.sm },
   switchRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: spacing.sm },
   footer: {
     padding: spacing.md,

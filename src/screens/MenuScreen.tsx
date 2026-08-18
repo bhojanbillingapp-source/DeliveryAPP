@@ -14,6 +14,7 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import api from '../api/client';
 import { OUTLET_ID } from '../config';
 import { useCart } from '../context/CartContext';
+import MenuItemModal from '../components/MenuItemModal';
 import type { AppStackParamList } from '../navigation/types';
 import type { MenuItem } from '../types';
 import { colors, radius, spacing } from '../theme';
@@ -24,12 +25,13 @@ const UNCATEGORIZED = 'Other';
 
 export default function MenuScreen({ navigation }: Props) {
   const insets = useSafeAreaInsets();
-  const { lines, addItem, incrementItem, decrementItem, itemCount, total } = useCart();
+  const { lines, addItem, incrementLine, decrementLine, itemCount, total } = useCart();
   const [items, setItems] = useState<MenuItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
+  const [modalItem, setModalItem] = useState<MenuItem | null>(null);
 
   const loadMenu = useCallback(async () => {
     try {
@@ -50,8 +52,15 @@ export default function MenuScreen({ navigation }: Props) {
     loadMenu();
   }, [loadMenu]);
 
-  function quantityFor(itemId: number) {
-    return lines.find(l => l.item_id === itemId)?.quantity ?? 0;
+  // A variant item can occupy several cart lines at once (one per chosen
+  // variant), so "how many of this item are in the cart" sums across all of
+  // them rather than looking up a single line.
+  function totalQuantityFor(itemId: number) {
+    return lines.filter(l => l.item_id === itemId).reduce((sum, l) => sum + l.quantity, 0);
+  }
+
+  function defaultLineFor(itemId: number) {
+    return lines.find(l => l.cart_key === `${itemId}::default`);
   }
 
   const searchLower = search.trim().toLowerCase();
@@ -122,31 +131,42 @@ export default function MenuScreen({ navigation }: Props) {
           </View>
         )}
         renderItem={({ item }) => {
-          const qty = quantityFor(item.id);
+          const hasVariants = Boolean(item.variants && item.variants.length > 0);
+          const totalQty = totalQuantityFor(item.id);
+          const defaultLine = defaultLineFor(item.id);
+          const lowestVariantPrice = hasVariants ? Math.min(...item.variants!.map(v => v.price)) : null;
+
           return (
             <View style={styles.card}>
               <View style={{ flex: 1 }}>
                 <Text style={styles.itemName}>{item.item_name}</Text>
-                <Text style={styles.itemPrice}>₹{item.price}</Text>
+                <Text style={styles.itemPrice}>{hasVariants ? `From ₹${lowestVariantPrice}` : `₹${item.price}`}</Text>
               </View>
-              {qty === 0 ? (
-                <TouchableOpacity style={styles.addButton} onPress={() => addItem(item)} activeOpacity={0.85}>
+              {hasVariants ? (
+                // Different variants of the same item can sit in the cart as
+                // separate lines, so a single +/- stepper can't represent
+                // "quantity" here — always route through the picker.
+                <TouchableOpacity style={styles.addButton} onPress={() => setModalItem(item)} activeOpacity={0.85}>
+                  <Text style={styles.addButtonText}>{totalQty > 0 ? `Add · ${totalQty}` : 'Add'}</Text>
+                </TouchableOpacity>
+              ) : !defaultLine ? (
+                <TouchableOpacity style={styles.addButton} onPress={() => setModalItem(item)} activeOpacity={0.85}>
                   <Text style={styles.addButtonText}>Add</Text>
                 </TouchableOpacity>
               ) : (
                 <View style={styles.stepper}>
                   <TouchableOpacity
                     style={styles.stepperBtn}
-                    onPress={() => decrementItem(item.id)}
+                    onPress={() => decrementLine(defaultLine.cart_key)}
                     activeOpacity={0.85}
                     hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                   >
                     <Text style={styles.stepperBtnText}>−</Text>
                   </TouchableOpacity>
-                  <Text style={styles.stepperQty}>{qty}</Text>
+                  <Text style={styles.stepperQty}>{defaultLine.quantity}</Text>
                   <TouchableOpacity
                     style={styles.stepperBtn}
-                    onPress={() => incrementItem(item.id)}
+                    onPress={() => incrementLine(defaultLine.cart_key)}
                     activeOpacity={0.85}
                     hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                   >
@@ -175,6 +195,20 @@ export default function MenuScreen({ navigation }: Props) {
           <Text style={styles.cartBarText}>{itemCount} item{itemCount > 1 ? 's' : ''} · ₹{total.toFixed(2)}</Text>
           <Text style={styles.cartBarLink}>View Cart →</Text>
         </TouchableOpacity>
+      )}
+
+      {modalItem && (
+        <MenuItemModal
+          visible
+          itemName={modalItem.item_name}
+          basePrice={modalItem.price ?? 0}
+          variants={modalItem.variants}
+          onCancel={() => setModalItem(null)}
+          onConfirm={(note, variant) => {
+            addItem(modalItem, note, variant);
+            setModalItem(null);
+          }}
+        />
       )}
     </SafeAreaView>
   );

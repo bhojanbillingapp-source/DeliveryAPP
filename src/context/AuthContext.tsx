@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
+import { Alert } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import api, { CUSTOMER_STORAGE_KEY, TOKEN_STORAGE_KEY } from '../api/client';
+import api, { CUSTOMER_STORAGE_KEY, TOKEN_STORAGE_KEY, setUnauthorizedHandler } from '../api/client';
 import { OUTLET_ID } from '../config';
 import type { Customer } from '../types';
 
@@ -62,6 +63,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     await AsyncStorage.removeMany([TOKEN_STORAGE_KEY, CUSTOMER_STORAGE_KEY]);
     setCustomer(null);
   }
+
+  useEffect(() => {
+    setUnauthorizedHandler(() => {
+      logout();
+      Alert.alert('Session expired', 'Please log in again.');
+    });
+    return () => setUnauthorizedHandler(null);
+  }, []);
 
   async function updateCustomer(nextCustomer: Customer) {
     await AsyncStorage.setItem(CUSTOMER_STORAGE_KEY, JSON.stringify(nextCustomer));

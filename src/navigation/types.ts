@@ -10,7 +10,11 @@ export type AppStackParamList = {
   Orders: undefined;
   OrderDetail: { orderId: number };
   AddressList: { selectMode?: boolean } | undefined;
-  AddressForm: { address?: import('../types').Address } | undefined;
+  AddressForm: {
+    address?: import('../types').Address;
+    pickedCoords?: { latitude: number; longitude: number };
+  } | undefined;
+  MapPicker: { initialCoords?: { latitude: number; longitude: number } } | undefined;
   TrackOrder: { orderId: number };
   Profile: undefined;
 };
