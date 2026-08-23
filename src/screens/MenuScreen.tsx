@@ -12,9 +12,10 @@ import {
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import api from '../api/client';
-import { OUTLET_ID } from '../config';
 import { useCart } from '../context/CartContext';
+import { useOutlet } from '../context/OutletContext';
 import MenuItemModal from '../components/MenuItemModal';
+import OutletPickerModal from '../components/OutletPickerModal';
 import type { AppStackParamList } from '../navigation/types';
 import type { MenuItem } from '../types';
 import { colors, radius, spacing } from '../theme';
@@ -26,18 +27,23 @@ const UNCATEGORIZED = 'Other';
 export default function MenuScreen({ navigation }: Props) {
   const insets = useSafeAreaInsets();
   const { lines, addItem, incrementLine, decrementLine, itemCount, total } = useCart();
+  const { selectedOutlet } = useOutlet();
   const [items, setItems] = useState<MenuItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [modalItem, setModalItem] = useState<MenuItem | null>(null);
+  const [outletPickerVisible, setOutletPickerVisible] = useState(false);
+
+  const outletId = selectedOutlet?.outlet_id ?? null;
 
   const loadMenu = useCallback(async () => {
+    if (!outletId) return;
     try {
       setError(null);
       const { data } = await api.get('/ordermenu', {
-        params: { outlet_id: OUTLET_ID, order_type: 'delivery' },
+        params: { outlet_id: outletId, order_type: 'delivery' },
       });
       setItems(data.filter((item: MenuItem) => item.is_active && item.price != null));
     } catch (err: any) {
@@ -46,11 +52,11 @@ export default function MenuScreen({ navigation }: Props) {
       setLoading(false);
       setRefreshing(false);
     }
-  }, []);
+  }, [outletId]);
 
   useEffect(() => {
-    loadMenu();
-  }, [loadMenu]);
+    if (outletId) loadMenu();
+  }, [outletId, loadMenu]);
 
   // A variant item can occupy several cart lines at once (one per chosen
   // variant), so "how many of this item are in the cart" sums across all of
@@ -105,6 +111,17 @@ export default function MenuScreen({ navigation }: Props) {
           </TouchableOpacity>
         </View>
       </View>
+
+      <TouchableOpacity
+        style={styles.outletBar}
+        onPress={() => setOutletPickerVisible(true)}
+        activeOpacity={0.75}
+      >
+        <Text style={styles.outletBarText} numberOfLines={1}>
+          Ordering from: {selectedOutlet ? (selectedOutlet.restaurant_brand_name || selectedOutlet.legal_business_name) : '…'}
+        </Text>
+        <Text style={styles.outletBarChange}>Change</Text>
+      </TouchableOpacity>
 
       <View style={styles.searchWrap}>
         <TextInput
@@ -210,6 +227,8 @@ export default function MenuScreen({ navigation }: Props) {
           }}
         />
       )}
+
+      <OutletPickerModal visible={outletPickerVisible} onClose={() => setOutletPickerVisible(false)} />
     </SafeAreaView>
   );
 }
@@ -238,6 +257,18 @@ const styles = StyleSheet.create({
   },
   ordersBtnText: { color: colors.primary, fontWeight: '600', fontSize: 13 },
   headerLinkMuted: { color: colors.primary, fontWeight: '600', fontSize: 13 },
+  outletBar: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs,
+    backgroundColor: colors.background,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  outletBarText: { flex: 1, fontSize: 12, fontWeight: '600', color: colors.textMuted, marginRight: spacing.sm },
+  outletBarChange: { fontSize: 12, fontWeight: '700', color: colors.primary },
   searchWrap: {
     backgroundColor: colors.surface,
     paddingHorizontal: spacing.md,

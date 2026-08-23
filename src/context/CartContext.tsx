@@ -7,6 +7,7 @@ type CartContextValue = {
   incrementLine: (cartKey: string) => void;
   decrementLine: (cartKey: string) => void;
   removeLine: (cartKey: string) => void;
+  updateLineNote: (cartKey: string, note: string) => void;
   clear: () => void;
   total: number;
   itemCount: number;
@@ -57,6 +58,10 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     setLines(prev => prev.filter(l => l.cart_key !== cartKey));
   }
 
+  function updateLineNote(cartKey: string, note: string) {
+    setLines(prev => prev.map(l => (l.cart_key === cartKey ? { ...l, note: note.trim() || undefined } : l)));
+  }
+
   function clear() {
     setLines([]);
   }
@@ -66,7 +71,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
 
   return (
     <CartContext.Provider
-      value={{ lines, addItem, incrementLine, decrementLine, removeLine, clear, total, itemCount }}
+      value={{ lines, addItem, incrementLine, decrementLine, removeLine, updateLineNote, clear, total, itemCount }}
     >
       {children}
     </CartContext.Provider>

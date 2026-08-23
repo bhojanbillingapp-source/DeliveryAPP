@@ -19,6 +19,13 @@ import { createAddress, updateAddress } from '../api/addresses';
 import type { AppStackParamList } from '../navigation/types';
 import { colors, radius, spacing } from '../theme';
 
+// Use the plain Android location manager instead of the Play Services fused
+// provider — emulators and devices without Play Services fail with
+// "No location provider available" otherwise.
+if (Platform.OS === 'android') {
+  Geolocation.setRNConfiguration({ skipPermissionRequests: false, locationProvider: 'android' });
+}
+
 type Props = NativeStackScreenProps<AppStackParamList, 'AddressForm'>;
 
 async function requestLocationPermission(): Promise<boolean> {
@@ -65,11 +72,25 @@ export default function AddressFormScreen({ navigation, route }: Props) {
         setCoords({ latitude: position.coords.latitude, longitude: position.coords.longitude });
         setLocating(false);
       },
-      error => {
-        setLocating(false);
-        Alert.alert('Could not get location', error.message);
+      () => {
+        // High-accuracy GPS fix failed (common on emulators/indoors) — retry
+        // with coarse/network-based location before giving up.
+        Geolocation.getCurrentPosition(
+          position => {
+            setCoords({ latitude: position.coords.latitude, longitude: position.coords.longitude });
+            setLocating(false);
+          },
+          error => {
+            setLocating(false);
+            Alert.alert(
+              'Could not get location',
+              `${error.message} You can pick your location on the map instead.`
+            );
+          },
+          { enableHighAccuracy: false, timeout: 15000, maximumAge: 60000 }
+        );
       },
-      { enableHighAccuracy: true, timeout: 15000, maximumAge: 10000 }
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 10000 }
     );
   }
 

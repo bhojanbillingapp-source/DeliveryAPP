@@ -17,7 +17,7 @@ const HIT_SLOP = { top: 8, bottom: 8, left: 8, right: 8 };
 
 export default function CartScreen({ navigation, route }: Props) {
   const insets = useSafeAreaInsets();
-  const { lines, incrementLine, decrementLine, removeLine, total, clear } = useCart();
+  const { lines, incrementLine, decrementLine, removeLine, updateLineNote, total, clear } = useCart();
   const [note, setNote] = useState('');
   const [placing, setPlacing] = useState(false);
   const [addresses, setAddresses] = useState<Address[]>([]);
@@ -63,7 +63,7 @@ export default function CartScreen({ navigation, route }: Props) {
     }
     setPlacing(true);
     try {
-      const { data } = await api.post('/customer-orders/orders', {
+      const { data } = await api.post('/customer-order/orders', {
         items: lines.map(l => ({
           item_id: l.item_id,
           quantity: l.quantity,
@@ -98,7 +98,13 @@ export default function CartScreen({ navigation, route }: Props) {
             <View style={{ flex: 1 }}>
               <Text style={styles.itemName}>{item.item_name}</Text>
               {!!item.variant_label && <Text style={styles.itemVariant}>{item.variant_label}</Text>}
-              {!!item.note && <Text style={styles.itemNote}>Note: {item.note}</Text>}
+              <TextInput
+                style={styles.itemNoteInput}
+                placeholder="Add a note, e.g. less spicy (optional)"
+                placeholderTextColor={colors.textMuted}
+                value={item.note ?? ''}
+                onChangeText={text => updateLineNote(item.cart_key, text)}
+              />
               <Text style={styles.itemPrice}>₹{item.price} × {item.quantity} = ₹{(item.price * item.quantity).toFixed(2)}</Text>
               <TouchableOpacity onPress={() => removeLine(item.cart_key)} hitSlop={HIT_SLOP} style={styles.removeTouch}>
                 <Text style={styles.remove}>Remove</Text>
@@ -177,7 +183,16 @@ const styles = StyleSheet.create({
   },
   itemName: { fontSize: 16, fontWeight: '700', color: colors.text },
   itemVariant: { fontSize: 13, color: colors.primary, fontWeight: '600', marginTop: 2 },
-  itemNote: { fontSize: 12, color: colors.textMuted, fontStyle: 'italic', marginTop: 2 },
+  itemNoteInput: {
+    fontSize: 12,
+    color: colors.text,
+    marginTop: 4,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.sm,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+  },
   itemPrice: { fontSize: 13, color: colors.textMuted, marginTop: 4 },
   removeTouch: { alignSelf: 'flex-start', marginTop: spacing.xs },
   remove: { color: colors.danger, fontSize: 12, fontWeight: '600' },

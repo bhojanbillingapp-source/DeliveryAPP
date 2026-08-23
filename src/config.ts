@@ -1,8 +1,9 @@
-// This app instance is pinned to one restaurant outlet, matching the
-// per-restaurant deployment model — set OUTLET_ID in .env to that
-// restaurant's bbs.clients.client_id before building for a given outlet.
-import { OUTLET_ID as ENV_OUTLET_ID, API_HOST as ENV_API_HOST } from '@env';
-export const OUTLET_ID: string = ENV_OUTLET_ID;
+// This app instance is pinned to one restaurant brand (all its outlets) —
+// set CLIENT_GROUP_ID in .env to that brand's bbs.clients.client_group_id
+// before building. Customers pick which outlet within the group to order
+// from at runtime (see context/OutletContext.tsx) and can switch freely.
+import { CLIENT_GROUP_ID as ENV_CLIENT_GROUP_ID, API_HOST as ENV_API_HOST } from '@env';
+export const CLIENT_GROUP_ID: string = ENV_CLIENT_GROUP_ID;
 
 // 10.0.2.2 (the Android emulator's alias for the host machine's localhost) is
 // only reachable from the emulator. Set API_HOST in .env to your machine's LAN

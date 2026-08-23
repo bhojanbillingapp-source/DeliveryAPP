@@ -1,6 +1,7 @@
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_BASE_URL } from '../config';
+import { getSelectedOutletId } from '../utils/outletStore';
 
 export const TOKEN_STORAGE_KEY = 'customer_access_token';
 export const CUSTOMER_STORAGE_KEY = 'customer_profile';
@@ -12,6 +13,15 @@ api.interceptors.request.use(async config => {
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
   }
+
+  // Attach the app-wide selected outlet (from the outlet-switcher) so every
+  // call resolves against whichever outlet the customer is currently
+  // ordering from. Respect a caller-set header instead of clobbering it.
+  const outletId = getSelectedOutletId();
+  if (outletId && !config.headers['X-Selected-Outlet-Id']) {
+    config.headers['X-Selected-Outlet-Id'] = outletId;
+  }
+
   return config;
 });
 

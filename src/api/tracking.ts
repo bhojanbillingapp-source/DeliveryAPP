@@ -13,6 +13,6 @@ export type TrackingInfo = {
 };
 
 export async function trackOrder(orderId: number): Promise<TrackingInfo> {
-  const { data } = await api.get(`/customer-orders/orders/${orderId}/track`);
+  const { data } = await api.get(`/customer-order/orders/${orderId}/track`);
   return { status: data.status, delivery_boy_name: data.delivery_boy_name, location: data.location };
 }

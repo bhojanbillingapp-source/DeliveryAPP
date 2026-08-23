@@ -15,25 +15,25 @@ export type AddressInput = {
 };
 
 export async function listAddresses(): Promise<Address[]> {
-  const { data } = await api.get('/customer-orders/addresses');
+  const { data } = await api.get('/customer-order/addresses');
   return data.addresses;
 }
 
 export async function createAddress(input: AddressInput): Promise<Address> {
-  const { data } = await api.post('/customer-orders/addresses', input);
+  const { data } = await api.post('/customer-order/addresses', input);
   return data.address;
 }
 
 export async function updateAddress(addressId: number, input: Partial<AddressInput>): Promise<Address> {
-  const { data } = await api.put(`/customer-orders/addresses/${addressId}`, input);
+  const { data } = await api.put(`/customer-order/addresses/${addressId}`, input);
   return data.address;
 }
 
 export async function deleteAddress(addressId: number): Promise<void> {
-  await api.delete(`/customer-orders/addresses/${addressId}`);
+  await api.delete(`/customer-order/addresses/${addressId}`);
 }
 
 export async function setDefaultAddress(addressId: number): Promise<Address> {
-  const { data } = await api.put(`/customer-orders/addresses/${addressId}/default`);
+  const { data } = await api.put(`/customer-order/addresses/${addressId}/default`);
   return data.address;
 }

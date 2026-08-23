@@ -4,6 +4,7 @@ import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { useAuth } from '../context/AuthContext';
 import { CartProvider } from '../context/CartContext';
+import { OutletProvider } from '../context/OutletContext';
 import LoginScreen from '../screens/LoginScreen';
 import SignupScreen from '../screens/SignupScreen';
 import ForgotPasswordScreen from '../screens/ForgotPasswordScreen';
@@ -34,28 +35,30 @@ export default function RootNavigator() {
   }
 
   return (
-    <NavigationContainer>
-      {customer ? (
-        <CartProvider>
-          <AppStack.Navigator screenOptions={{ headerShown: false }}>
-            <AppStack.Screen name="Menu" component={MenuScreen} />
-            <AppStack.Screen name="Cart" component={CartScreen} />
-            <AppStack.Screen name="Orders" component={OrdersScreen} />
-            <AppStack.Screen name="OrderDetail" component={OrderDetailScreen} />
-            <AppStack.Screen name="AddressList" component={AddressListScreen} />
-            <AppStack.Screen name="AddressForm" component={AddressFormScreen} />
-            <AppStack.Screen name="MapPicker" component={MapPickerScreen} />
-            <AppStack.Screen name="TrackOrder" component={TrackOrderScreen} />
-            <AppStack.Screen name="Profile" component={ProfileScreen} />
-          </AppStack.Navigator>
-        </CartProvider>
-      ) : (
-        <AuthStack.Navigator screenOptions={{ headerShown: false }}>
-          <AuthStack.Screen name="Login" component={LoginScreen} />
-          <AuthStack.Screen name="Signup" component={SignupScreen} />
-          <AuthStack.Screen name="ForgotPassword" component={ForgotPasswordScreen} />
-        </AuthStack.Navigator>
-      )}
-    </NavigationContainer>
+    <OutletProvider>
+      <NavigationContainer>
+        {customer ? (
+          <CartProvider>
+            <AppStack.Navigator screenOptions={{ headerShown: false }}>
+              <AppStack.Screen name="Menu" component={MenuScreen} />
+              <AppStack.Screen name="Cart" component={CartScreen} />
+              <AppStack.Screen name="Orders" component={OrdersScreen} />
+              <AppStack.Screen name="OrderDetail" component={OrderDetailScreen} />
+              <AppStack.Screen name="AddressList" component={AddressListScreen} />
+              <AppStack.Screen name="AddressForm" component={AddressFormScreen} />
+              <AppStack.Screen name="MapPicker" component={MapPickerScreen} />
+              <AppStack.Screen name="TrackOrder" component={TrackOrderScreen} />
+              <AppStack.Screen name="Profile" component={ProfileScreen} />
+            </AppStack.Navigator>
+          </CartProvider>
+        ) : (
+          <AuthStack.Navigator screenOptions={{ headerShown: false }}>
+            <AuthStack.Screen name="Login" component={LoginScreen} />
+            <AuthStack.Screen name="Signup" component={SignupScreen} />
+            <AuthStack.Screen name="ForgotPassword" component={ForgotPasswordScreen} />
+          </AuthStack.Navigator>
+        )}
+      </NavigationContainer>
+    </OutletProvider>
   );
 }

@@ -2,7 +2,7 @@ import React, { createContext, useContext, useEffect, useState } from 'react';
 import { Alert } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import api, { CUSTOMER_STORAGE_KEY, TOKEN_STORAGE_KEY, setUnauthorizedHandler } from '../api/client';
-import { OUTLET_ID } from '../config';
+import { CLIENT_GROUP_ID } from '../config';
 import type { Customer } from '../types';
 
 type AuthContextValue = {
@@ -41,8 +41,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }
 
   async function login(mobile: string, password: string) {
-    const { data } = await api.post('/customer-orders/auth/login', {
-      outlet_id: OUTLET_ID,
+    const { data } = await api.post('/customer-order/auth/login', {
+      client_group_id: CLIENT_GROUP_ID,
       mobile,
       password,
     });
@@ -50,8 +50,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }
 
   async function signup(name: string, mobile: string, password: string) {
-    const { data } = await api.post('/customer-orders/auth/signup', {
-      outlet_id: OUTLET_ID,
+    const { data } = await api.post('/customer-order/auth/signup', {
+      client_group_id: CLIENT_GROUP_ID,
       name,
       mobile,
       password,

@@ -16,7 +16,7 @@ export default function OrdersScreen({ navigation }: Props) {
 
   const load = useCallback(async () => {
     try {
-      const { data } = await api.get('/customer-orders/orders');
+      const { data } = await api.get('/customer-order/orders');
       setOrders(data.orders);
     } finally {
       setLoading(false);

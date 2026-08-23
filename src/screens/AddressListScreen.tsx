@@ -39,7 +39,10 @@ export default function AddressListScreen({ navigation, route }: Props) {
 
   function handleSelect(address: Address) {
     if (selectMode) {
-      navigation.navigate('Cart', { selectedAddressId: address.address_id });
+      // `navigate` pushes a new screen in React Navigation v7 even when one
+      // already exists in the stack — `popTo` returns to the Cart screen the
+      // user came from instead of stacking a duplicate on top of it.
+      navigation.popTo('Cart', { selectedAddressId: address.address_id }, { merge: true });
     }
   }
 
