@@ -5,7 +5,10 @@ import { useFocusEffect } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import api from '../api/client';
 import { listAddresses } from '../api/addresses';
+import { previewCoupons, type Coupon } from '../api/coupons';
 import { useCart } from '../context/CartContext';
+import { useAuth } from '../context/AuthContext';
+import { useOutlet } from '../context/OutletContext';
 import ScreenHeader from '../components/ScreenHeader';
 import type { AppStackParamList } from '../navigation/types';
 import type { Address } from '../types';
@@ -17,14 +20,85 @@ const HIT_SLOP = { top: 8, bottom: 8, left: 8, right: 8 };
 
 export default function CartScreen({ navigation, route }: Props) {
   const insets = useSafeAreaInsets();
+  const { customer } = useAuth();
+  const { selectedOutlet } = useOutlet();
   const { lines, incrementLine, decrementLine, removeLine, updateLineNote, total, clear } = useCart();
   const [note, setNote] = useState('');
   const [placing, setPlacing] = useState(false);
   const [addresses, setAddresses] = useState<Address[]>([]);
   const [selectedAddressId, setSelectedAddressId] = useState<number | null>(null);
 
+  const [availableCoupons, setAvailableCoupons] = useState<Coupon[]>([]);
+  const [appliedCoupon, setAppliedCoupon] = useState<Coupon | null>(null);
+  const [couponCode, setCouponCode] = useState('');
+  const [couponBusy, setCouponBusy] = useState(false);
+  const [couponError, setCouponError] = useState<string | null>(null);
+  const [couponPanelOpen, setCouponPanelOpen] = useState(false);
+
+  const outletId = selectedOutlet?.outlet_id ?? null;
+
+  useEffect(() => {
+    if (!outletId || !lines.length) {
+      setAvailableCoupons([]);
+      return;
+    }
+    let cancelled = false;
+    previewCoupons(outletId, lines)
+      .then(result => {
+        if (cancelled) return;
+        setAvailableCoupons(result.coupons);
+        // The applied coupon may no longer be eligible (cart changed) — drop it.
+        if (appliedCoupon && !result.coupons.some(c => c.campaign_code === appliedCoupon.campaign_code)) {
+          setAppliedCoupon(null);
+        }
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [outletId, lines]);
+
+  async function applyCouponCode(code: string) {
+    if (!outletId || !code.trim()) return;
+    setCouponBusy(true);
+    setCouponError(null);
+    try {
+      const result = await previewCoupons(outletId, lines, code.trim());
+      if (result.code_error === 'NOT_FOUND') {
+        setCouponError('Invalid coupon code.');
+        return;
+      }
+      if (result.code_error === 'NOT_ELIGIBLE') {
+        setCouponError("This code doesn't apply to your cart.");
+        return;
+      }
+      const coupon = result.coupons.find(c => c.campaign_code === code.trim().toUpperCase());
+      if (!coupon) {
+        setCouponError("This code doesn't apply to your cart.");
+        return;
+      }
+      setAppliedCoupon(coupon);
+      setCouponCode('');
+      setCouponPanelOpen(false);
+    } catch (err: any) {
+      setCouponError(err?.response?.data?.message || 'Could not apply coupon.');
+    } finally {
+      setCouponBusy(false);
+    }
+  }
+
+  function removeCoupon() {
+    setAppliedCoupon(null);
+    setCouponError(null);
+  }
+
+  const discountAmount = appliedCoupon?.discount_amount ?? 0;
+  const finalTotal = Math.max(0, total - discountAmount);
+
   useFocusEffect(
     React.useCallback(() => {
+      if (!customer) return;
       let cancelled = false;
       (async () => {
         try {
@@ -41,7 +115,7 @@ export default function CartScreen({ navigation, route }: Props) {
       return () => {
         cancelled = true;
       };
-    }, [])
+    }, [customer])
   );
 
   useEffect(() => {
@@ -54,6 +128,10 @@ export default function CartScreen({ navigation, route }: Props) {
 
   async function placeOrder() {
     if (!lines.length) return;
+    if (!customer) {
+      navigation.navigate('Login');
+      return;
+    }
     if (!selectedAddressId) {
       Alert.alert('Add a delivery address', 'Add and select an address before placing your order.', [
         { text: 'Add address', onPress: () => navigation.navigate('AddressList', { selectMode: true }) },
@@ -73,8 +151,10 @@ export default function CartScreen({ navigation, route }: Props) {
         payment_method: 'COD',
         address_id: selectedAddressId,
         delivery_landmark: note.trim() || undefined,
+        promo_code: appliedCoupon?.campaign_code,
       });
       clear();
+      setAppliedCoupon(null);
       Alert.alert('Order placed!', `Order #${data.daily_order_no} — pay ₹${data.total_amount} on delivery.`, [
         { text: 'View order', onPress: () => navigation.replace('OrderDetail', { orderId: data.order_id }) },
       ]);
@@ -126,42 +206,116 @@ export default function CartScreen({ navigation, route }: Props) {
 
       {lines.length > 0 && (
         <View style={[styles.footer, { paddingBottom: spacing.md + insets.bottom }]}>
-          <TouchableOpacity
-            style={styles.addressCard}
-            activeOpacity={0.8}
-            onPress={() => navigation.navigate('AddressList', { selectMode: true })}
-          >
-            {selectedAddress ? (
+          {customer && (
+            <TouchableOpacity
+              style={styles.addressCard}
+              activeOpacity={0.8}
+              onPress={() => navigation.navigate('AddressList', { selectMode: true })}
+            >
+              {selectedAddress ? (
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.addressLabel}>Deliver to: {selectedAddress.label}</Text>
+                  <Text style={styles.addressText} numberOfLines={2}>
+                    {[selectedAddress.address_line1, selectedAddress.city].filter(Boolean).join(', ')}
+                  </Text>
+                </View>
+              ) : (
+                <Text style={styles.addressLabel}>+ Add a delivery address</Text>
+              )}
+              <Text style={styles.changeText}>Change</Text>
+            </TouchableOpacity>
+          )}
+          {customer && (
+            <TextInput
+              style={styles.input}
+              placeholder="Delivery note, e.g. ring the bell (optional)"
+              placeholderTextColor={colors.textMuted}
+              value={note}
+              onChangeText={setNote}
+            />
+          )}
+
+          {appliedCoupon ? (
+            <View style={styles.couponAppliedRow}>
               <View style={{ flex: 1 }}>
-                <Text style={styles.addressLabel}>Deliver to: {selectedAddress.label}</Text>
-                <Text style={styles.addressText} numberOfLines={2}>
-                  {[selectedAddress.address_line1, selectedAddress.city].filter(Boolean).join(', ')}
-                </Text>
+                <Text style={styles.couponAppliedCode}>{appliedCoupon.campaign_code} applied</Text>
+                <Text style={styles.couponAppliedName}>{appliedCoupon.campaign_name}</Text>
               </View>
-            ) : (
-              <Text style={styles.addressLabel}>+ Add a delivery address</Text>
-            )}
-            <Text style={styles.changeText}>Change</Text>
-          </TouchableOpacity>
-          <TextInput
-            style={styles.input}
-            placeholder="Delivery note, e.g. ring the bell (optional)"
-            placeholderTextColor={colors.textMuted}
-            value={note}
-            onChangeText={setNote}
-          />
+              <TouchableOpacity onPress={removeCoupon} hitSlop={HIT_SLOP}>
+                <Text style={styles.couponRemove}>Remove</Text>
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <TouchableOpacity
+              style={styles.couponRow}
+              activeOpacity={0.75}
+              onPress={() => setCouponPanelOpen(v => !v)}
+            >
+              <Text style={styles.couponRowText}>+ Coupon</Text>
+              <Text style={styles.changeText}>{couponPanelOpen ? 'Close' : 'View'}</Text>
+            </TouchableOpacity>
+          )}
+
+          {!appliedCoupon && couponPanelOpen && (
+            <View style={styles.couponPanel}>
+              <View style={styles.couponInputRow}>
+                <TextInput
+                  style={[styles.input, styles.couponInput]}
+                  placeholder="Enter coupon code"
+                  placeholderTextColor={colors.textMuted}
+                  autoCapitalize="characters"
+                  value={couponCode}
+                  onChangeText={setCouponCode}
+                />
+                <TouchableOpacity
+                  style={[styles.couponApplyBtn, couponBusy && styles.checkoutButtonDisabled]}
+                  onPress={() => applyCouponCode(couponCode)}
+                  disabled={couponBusy || !couponCode.trim()}
+                  activeOpacity={0.85}
+                >
+                  {couponBusy ? <ActivityIndicator color="#fff" size="small" /> : <Text style={styles.couponApplyBtnText}>Apply</Text>}
+                </TouchableOpacity>
+              </View>
+              {!!couponError && <Text style={styles.couponError}>{couponError}</Text>}
+              {availableCoupons.filter(c => !c.requires_code || c.is_discoverable).map(c => (
+                <TouchableOpacity key={c.campaign_code} style={styles.couponSuggestion} onPress={() => applyCouponCode(c.campaign_code)} activeOpacity={0.75}>
+                  <Text style={styles.couponSuggestionText}>
+                    {c.requires_code ? `${c.campaign_name} — use ${c.campaign_code} for ₹${c.discount_amount} off` : `${c.campaign_name} — ₹${c.discount_amount} off`}
+                  </Text>
+                  <Text style={styles.couponSuggestionApply}>Apply</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          )}
+
           <View style={styles.totalRow}>
-            <Text style={styles.total}>Total</Text>
+            <Text style={styles.total}>Subtotal</Text>
             <Text style={styles.totalAmount}>₹{total.toFixed(2)}</Text>
           </View>
-          <Text style={styles.codNote}>Pay by Cash on Delivery</Text>
+          {discountAmount > 0 && (
+            <View style={styles.totalRow}>
+              <Text style={styles.total}>Discount</Text>
+              <Text style={[styles.totalAmount, styles.discountAmount]}>−₹{discountAmount.toFixed(2)}</Text>
+            </View>
+          )}
+          <View style={styles.totalRow}>
+            <Text style={styles.total}>Total</Text>
+            <Text style={styles.totalAmount}>₹{finalTotal.toFixed(2)}</Text>
+          </View>
+          {customer && <Text style={styles.codNote}>Pay by Cash on Delivery</Text>}
           <TouchableOpacity
             style={[styles.checkoutButton, placing && styles.checkoutButtonDisabled]}
             onPress={placeOrder}
             disabled={placing}
             activeOpacity={0.85}
           >
-            {placing ? <ActivityIndicator color="#fff" /> : <Text style={styles.checkoutButtonText}>Place Order (COD) →</Text>}
+            {placing ? (
+              <ActivityIndicator color="#fff" />
+            ) : (
+              <Text style={styles.checkoutButtonText}>
+                {customer ? 'Place Order (COD) →' : 'Sign In to Checkout →'}
+              </Text>
+            )}
           </TouchableOpacity>
         </View>
       )}
@@ -237,9 +391,60 @@ const styles = StyleSheet.create({
     marginBottom: spacing.md,
     color: colors.text,
   },
+  couponRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.sm,
+    padding: 12,
+    marginBottom: spacing.md,
+  },
+  couponRowText: { fontSize: 14, fontWeight: '700', color: colors.text },
+  couponAppliedRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    borderWidth: 1,
+    borderColor: colors.success,
+    backgroundColor: '#EAF6EC',
+    borderRadius: radius.sm,
+    padding: 12,
+    marginBottom: spacing.md,
+  },
+  couponAppliedCode: { fontSize: 14, fontWeight: '800', color: colors.success },
+  couponAppliedName: { fontSize: 12, color: colors.textMuted, marginTop: 2 },
+  couponRemove: { color: colors.danger, fontWeight: '700', fontSize: 13 },
+  couponPanel: { marginBottom: spacing.md },
+  couponInputRow: { flexDirection: 'row', gap: spacing.sm, alignItems: 'flex-start' },
+  couponInput: { flex: 1, marginBottom: spacing.sm },
+  couponApplyBtn: {
+    backgroundColor: colors.primary,
+    borderRadius: radius.sm,
+    paddingHorizontal: 18,
+    height: 48,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  couponApplyBtnText: { color: '#fff', fontWeight: '700', fontSize: 13 },
+  couponError: { color: colors.danger, fontSize: 12, marginBottom: spacing.sm },
+  couponSuggestion: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.sm,
+    padding: 10,
+    marginBottom: spacing.sm,
+  },
+  couponSuggestionText: { flex: 1, fontSize: 13, color: colors.text, marginRight: spacing.sm },
+  couponSuggestionApply: { color: colors.primary, fontWeight: '700', fontSize: 13 },
   totalRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: spacing.xs },
   total: { fontSize: 16, fontWeight: '600', color: colors.text },
   totalAmount: { fontSize: 18, fontWeight: '800', color: colors.text },
+  discountAmount: { color: colors.success },
   codNote: { color: colors.textMuted, marginBottom: spacing.md, fontSize: 13 },
   checkoutButton: { backgroundColor: colors.accent, borderRadius: radius.sm, padding: 16, alignItems: 'center' },
   checkoutButtonDisabled: { opacity: 0.6 },

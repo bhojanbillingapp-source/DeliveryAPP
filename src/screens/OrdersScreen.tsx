@@ -1,15 +1,22 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { View, Text, FlatList, TouchableOpacity, StyleSheet, ActivityIndicator, RefreshControl } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
+import type { CompositeScreenProps } from '@react-navigation/native';
+import type { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
 import api from '../api/client';
+import { useAuth } from '../context/AuthContext';
 import ScreenHeader from '../components/ScreenHeader';
-import type { AppStackParamList } from '../navigation/types';
+import type { AppStackParamList, MainTabParamList } from '../navigation/types';
 import type { OrderSummary } from '../types';
 import { colors, radius, spacing, statusColors } from '../theme';
 
-type Props = NativeStackScreenProps<AppStackParamList, 'Orders'>;
+type Props = CompositeScreenProps<
+  BottomTabScreenProps<MainTabParamList, 'MyOrders'>,
+  NativeStackScreenProps<AppStackParamList>
+>;
 
 export default function OrdersScreen({ navigation }: Props) {
+  const { customer } = useAuth();
   const [orders, setOrders] = useState<OrderSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -25,12 +32,27 @@ export default function OrdersScreen({ navigation }: Props) {
   }, []);
 
   useEffect(() => {
-    load();
-  }, [load]);
+    if (customer) load();
+    else setLoading(false);
+  }, [customer, load]);
+
+  if (!customer) {
+    return (
+      <View style={styles.container}>
+        <ScreenHeader title="My Orders" />
+        <View style={styles.center}>
+          <Text style={styles.signInPrompt}>Sign in to view your orders.</Text>
+          <TouchableOpacity style={styles.signInButton} onPress={() => navigation.navigate('Login')} activeOpacity={0.85}>
+            <Text style={styles.signInButtonText}>Sign In</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>
-      <ScreenHeader title="My Orders" onBack={() => navigation.goBack()} />
+      <ScreenHeader title="My Orders" />
 
       {loading ? (
         <View style={styles.center}>
@@ -72,7 +94,10 @@ export default function OrdersScreen({ navigation }: Props) {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
-  center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  center: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: spacing.lg },
+  signInPrompt: { color: colors.textMuted, fontSize: 15, marginBottom: spacing.md, textAlign: 'center' },
+  signInButton: { backgroundColor: colors.primary, borderRadius: radius.sm, paddingVertical: 14, paddingHorizontal: 28 },
+  signInButtonText: { color: '#fff', fontWeight: '700', fontSize: 15 },
   card: {
     flexDirection: 'row',
     justifyContent: 'space-between',

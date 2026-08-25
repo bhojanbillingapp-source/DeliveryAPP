@@ -8,35 +8,15 @@ import {
   ScrollView,
   ActivityIndicator,
   Alert,
-  Platform,
-  PermissionsAndroid,
   Switch,
 } from 'react-native';
-import Geolocation from '@react-native-community/geolocation';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import ScreenHeader from '../components/ScreenHeader';
 import { createAddress, updateAddress } from '../api/addresses';
 import type { AppStackParamList } from '../navigation/types';
 import { colors, radius, spacing } from '../theme';
 
-// Use the plain Android location manager instead of the Play Services fused
-// provider — emulators and devices without Play Services fail with
-// "No location provider available" otherwise.
-if (Platform.OS === 'android') {
-  Geolocation.setRNConfiguration({ skipPermissionRequests: false, locationProvider: 'android' });
-}
-
 type Props = NativeStackScreenProps<AppStackParamList, 'AddressForm'>;
-
-async function requestLocationPermission(): Promise<boolean> {
-  if (Platform.OS !== 'android') return true;
-  const granted = await PermissionsAndroid.request(PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION, {
-    title: 'Location permission',
-    message: 'Used to fill in your delivery address with your current location.',
-    buttonPositive: 'Allow',
-  });
-  return granted === PermissionsAndroid.RESULTS.GRANTED;
-}
 
 export default function AddressFormScreen({ navigation, route }: Props) {
   const editing = route.params?.address;
@@ -51,7 +31,6 @@ export default function AddressFormScreen({ navigation, route }: Props) {
   const [coords, setCoords] = useState<{ latitude: number; longitude: number } | null>(
     editing ? { latitude: editing.latitude, longitude: editing.longitude } : null
   );
-  const [locating, setLocating] = useState(false);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -59,40 +38,6 @@ export default function AddressFormScreen({ navigation, route }: Props) {
       setCoords(route.params.pickedCoords);
     }
   }, [route.params?.pickedCoords]);
-
-  async function useCurrentLocation() {
-    const allowed = await requestLocationPermission();
-    if (!allowed) {
-      Alert.alert('Permission needed', 'Location permission is required to use your current location.');
-      return;
-    }
-    setLocating(true);
-    Geolocation.getCurrentPosition(
-      position => {
-        setCoords({ latitude: position.coords.latitude, longitude: position.coords.longitude });
-        setLocating(false);
-      },
-      () => {
-        // High-accuracy GPS fix failed (common on emulators/indoors) — retry
-        // with coarse/network-based location before giving up.
-        Geolocation.getCurrentPosition(
-          position => {
-            setCoords({ latitude: position.coords.latitude, longitude: position.coords.longitude });
-            setLocating(false);
-          },
-          error => {
-            setLocating(false);
-            Alert.alert(
-              'Could not get location',
-              `${error.message} You can pick your location on the map instead.`
-            );
-          },
-          { enableHighAccuracy: false, timeout: 15000, maximumAge: 60000 }
-        );
-      },
-      { enableHighAccuracy: true, timeout: 10000, maximumAge: 10000 }
-    );
-  }
 
   async function handleSave() {
     if (!addressLine1.trim()) {
@@ -188,21 +133,14 @@ export default function AddressFormScreen({ navigation, route }: Props) {
           placeholderTextColor={colors.textMuted}
         />
 
-        <TouchableOpacity style={styles.locationButton} onPress={useCurrentLocation} disabled={locating} activeOpacity={0.85}>
-          {locating ? (
-            <ActivityIndicator color={colors.primary} />
-          ) : (
-            <Text style={styles.locationButtonText}>
-              {coords ? `Location set (${coords.latitude.toFixed(5)}, ${coords.longitude.toFixed(5)})` : '📍 Use current location'}
-            </Text>
-          )}
-        </TouchableOpacity>
         <TouchableOpacity
-          style={[styles.locationButton, styles.mapPickButton]}
+          style={styles.locationButton}
           onPress={() => navigation.navigate('MapPicker', { initialCoords: coords ?? undefined })}
           activeOpacity={0.85}
         >
-          <Text style={styles.locationButtonText}>🗺️ Pick on map</Text>
+          <Text style={styles.locationButtonText}>
+            {coords ? `Location set (${coords.latitude.toFixed(5)}, ${coords.longitude.toFixed(5)})` : '🗺️ Pick on map'}
+          </Text>
         </TouchableOpacity>
         {!coords && (
           <Text style={styles.locationHint}>
@@ -249,7 +187,6 @@ const styles = StyleSheet.create({
     marginBottom: spacing.sm,
   },
   locationButtonText: { color: colors.primary, fontWeight: '700' },
-  mapPickButton: { marginTop: -spacing.xs },
   locationHint: { fontSize: 12, color: colors.textMuted, marginTop: -spacing.xs, marginBottom: spacing.sm },
   switchRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: spacing.sm },
   footer: {

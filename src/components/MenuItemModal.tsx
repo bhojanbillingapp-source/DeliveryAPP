@@ -44,9 +44,11 @@ export default function MenuItemModal({ visible, itemName, basePrice, variants, 
   }
 
   return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={handleCancel}>
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={handleCancel}>
       <View style={styles.overlay}>
+        <TouchableOpacity style={StyleSheet.absoluteFill} activeOpacity={1} onPress={handleCancel} />
         <View style={styles.card}>
+          <View style={styles.grabber} />
           <Text style={styles.itemName}>{itemName}</Text>
           <Text style={styles.subtitle}>Add a note for the kitchen</Text>
 
@@ -120,8 +122,24 @@ export default function MenuItemModal({ visible, itemName, basePrice, variants, 
 }
 
 const styles = StyleSheet.create({
-  overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', alignItems: 'center', justifyContent: 'center', padding: spacing.lg },
-  card: { width: '100%', maxWidth: 380, borderRadius: radius.lg, backgroundColor: colors.surface, padding: spacing.lg },
+  overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'flex-end' },
+  card: {
+    width: '100%',
+    maxHeight: '85%',
+    borderTopLeftRadius: radius.lg,
+    borderTopRightRadius: radius.lg,
+    backgroundColor: colors.surface,
+    padding: spacing.lg,
+    paddingBottom: spacing.xl,
+  },
+  grabber: {
+    alignSelf: 'center',
+    width: 40,
+    height: 4,
+    borderRadius: radius.pill,
+    backgroundColor: colors.border,
+    marginBottom: spacing.md,
+  },
   itemName: { fontSize: 17, fontWeight: '700', color: colors.text },
   subtitle: { fontSize: 13, color: colors.textMuted, marginTop: spacing.xs },
   sectionLabel: { fontSize: 12, fontWeight: '600', color: colors.textMuted, marginTop: spacing.md },

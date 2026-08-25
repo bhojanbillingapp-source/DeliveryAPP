@@ -2,19 +2,26 @@ import React, { useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator, Alert } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { sendResetOtp, verifyResetOtp, resetPassword } from '../api/passwordReset';
-import type { AuthStackParamList } from '../navigation/types';
+import CountryCodePicker from '../components/CountryCodePicker';
+import type { CountryCode } from '../data/countryCodes';
+import { COUNTRY_CODES } from '../data/countryCodes';
+import type { AppStackParamList } from '../navigation/types';
 import { colors, radius, spacing } from '../theme';
 
-type Props = NativeStackScreenProps<AuthStackParamList, 'ForgotPassword'>;
+type Props = NativeStackScreenProps<AppStackParamList, 'ForgotPassword'>;
 
 type Step = 'mobile' | 'otp' | 'password';
 
 export default function ForgotPasswordScreen({ navigation }: Props) {
   const [step, setStep] = useState<Step>('mobile');
+  const [country, setCountry] = useState<CountryCode>(COUNTRY_CODES[0]);
+  const [pickerVisible, setPickerVisible] = useState(false);
   const [mobile, setMobile] = useState('');
   const [otp, setOtp] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [loading, setLoading] = useState(false);
+
+  const fullMobile = `${country.dial_code}${mobile.trim()}`;
 
   async function handleSendOtp() {
     if (!mobile.trim()) {
@@ -23,7 +30,7 @@ export default function ForgotPasswordScreen({ navigation }: Props) {
     }
     setLoading(true);
     try {
-      const result = await sendResetOtp(mobile.trim());
+      const result = await sendResetOtp(fullMobile);
       if (result.dev_otp) {
         Alert.alert('Dev OTP', `OTP: ${result.dev_otp}`);
       }
@@ -42,7 +49,7 @@ export default function ForgotPasswordScreen({ navigation }: Props) {
     }
     setLoading(true);
     try {
-      await verifyResetOtp(mobile.trim(), otp.trim());
+      await verifyResetOtp(fullMobile, otp.trim());
       setStep('password');
     } catch (err: any) {
       Alert.alert('Invalid OTP', err?.response?.data?.message || 'Something went wrong.');
@@ -58,7 +65,7 @@ export default function ForgotPasswordScreen({ navigation }: Props) {
     }
     setLoading(true);
     try {
-      await resetPassword(mobile.trim(), otp.trim(), newPassword);
+      await resetPassword(fullMobile, otp.trim(), newPassword);
       Alert.alert('Password reset', 'You can now log in with your new password.', [
         { text: 'Log in', onPress: () => navigation.replace('Login') },
       ]);
@@ -75,15 +82,19 @@ export default function ForgotPasswordScreen({ navigation }: Props) {
 
       {step === 'mobile' && (
         <>
-          <TextInput
-            style={styles.input}
-            placeholder="Mobile number"
-            placeholderTextColor={colors.textMuted}
-            keyboardType="phone-pad"
-            value={mobile}
-            onChangeText={setMobile}
-            autoCapitalize="none"
-          />
+          <View style={styles.phoneRow}>
+            <TouchableOpacity style={styles.countryCode} onPress={() => setPickerVisible(true)} activeOpacity={0.75}>
+              <Text style={styles.countryCodeText}>{country.flag} {country.dial_code}</Text>
+            </TouchableOpacity>
+            <TextInput
+              style={[styles.input, styles.phoneInput]}
+              placeholder="Mobile number"
+              placeholderTextColor={colors.textMuted}
+              keyboardType="phone-pad"
+              value={mobile}
+              onChangeText={t => setMobile(t.replace(/\D/g, ''))}
+            />
+          </View>
           <TouchableOpacity style={[styles.button, loading && styles.buttonDisabled]} onPress={handleSendOtp} disabled={loading} activeOpacity={0.85}>
             {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Send OTP</Text>}
           </TouchableOpacity>
@@ -92,7 +103,7 @@ export default function ForgotPasswordScreen({ navigation }: Props) {
 
       {step === 'otp' && (
         <>
-          <Text style={styles.helper}>Enter the OTP sent to {mobile}</Text>
+          <Text style={styles.helper}>Enter the OTP sent to {country.dial_code} {mobile}</Text>
           <TextInput
             style={styles.input}
             placeholder="6-digit OTP"
@@ -126,6 +137,8 @@ export default function ForgotPasswordScreen({ navigation }: Props) {
       <TouchableOpacity onPress={() => navigation.replace('Login')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
         <Text style={styles.link}>Back to login</Text>
       </TouchableOpacity>
+
+      <CountryCodePicker visible={pickerVisible} onClose={() => setPickerVisible(false)} onSelect={setCountry} />
     </View>
   );
 }
@@ -134,6 +147,18 @@ const styles = StyleSheet.create({
   container: { flex: 1, justifyContent: 'center', padding: spacing.lg, backgroundColor: colors.background },
   title: { fontSize: 22, fontWeight: '700', color: colors.text, marginBottom: spacing.lg, textAlign: 'center' },
   helper: { color: colors.textMuted, marginBottom: spacing.md, textAlign: 'center' },
+  phoneRow: { flexDirection: 'row', gap: spacing.sm },
+  countryCode: {
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.sm,
+    paddingHorizontal: 14,
+    justifyContent: 'center',
+    marginBottom: spacing.md,
+  },
+  countryCodeText: { fontSize: 16, color: colors.text, fontWeight: '600' },
+  phoneInput: { flex: 1 },
   input: {
     backgroundColor: colors.surface,
     borderWidth: 1,

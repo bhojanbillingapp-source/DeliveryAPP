@@ -1,10 +1,11 @@
-import React, { useRef, useState } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import React, { useEffect, useRef, useState } from 'react';
+import { ActivityIndicator, View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { WebView, WebViewMessageEvent } from 'react-native-webview';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import ScreenHeader from '../components/ScreenHeader';
 import type { AppStackParamList } from '../navigation/types';
 import { colors, radius, spacing } from '../theme';
+import { getCurrentCoords, requestLocationPermission } from '../utils/geolocation';
 
 type Props = NativeStackScreenProps<AppStackParamList, 'MapPicker'>;
 
@@ -44,11 +45,36 @@ function buildMapHtml(latitude: number, longitude: number, zoom: number): string
 
 export default function MapPickerScreen({ navigation, route }: Props) {
   const initial = route.params?.initialCoords;
-  const startCoords = initial ?? DEFAULT_COORDS;
-  const startZoom = initial ? PICKED_ZOOM : DEFAULT_ZOOM;
 
-  const [coords, setCoords] = useState(startCoords);
-  const htmlRef = useRef(buildMapHtml(startCoords.latitude, startCoords.longitude, startZoom));
+  const [coords, setCoords] = useState(initial ?? DEFAULT_COORDS);
+  const [locating, setLocating] = useState(!initial);
+  const htmlRef = useRef(initial ? buildMapHtml(initial.latitude, initial.longitude, PICKED_ZOOM) : null);
+
+  useEffect(() => {
+    if (initial) return;
+    let cancelled = false;
+    (async () => {
+      const allowed = await requestLocationPermission();
+      if (!allowed || cancelled) {
+        setLocating(false);
+        return;
+      }
+      try {
+        const current = await getCurrentCoords();
+        if (cancelled) return;
+        setCoords(current);
+        htmlRef.current = buildMapHtml(current.latitude, current.longitude, PICKED_ZOOM);
+      } catch {
+        // Fall back to the India-wide default view already set.
+      } finally {
+        if (!cancelled) setLocating(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   function handleMessage(event: WebViewMessageEvent) {
     try {
@@ -75,17 +101,26 @@ export default function MapPickerScreen({ navigation, route }: Props) {
     <View style={styles.container}>
       <ScreenHeader title="Pick your location" onBack={() => navigation.goBack()} />
       <View style={styles.mapWrap}>
-        <WebView
-          style={StyleSheet.absoluteFill}
-          originWhitelist={['*']}
-          source={{ html: htmlRef.current }}
-          onMessage={handleMessage}
-          javaScriptEnabled
-          domStorageEnabled
-        />
-        <View pointerEvents="none" style={styles.pinWrap}>
-          <Text style={styles.pin}>📍</Text>
-        </View>
+        {locating || !htmlRef.current ? (
+          <View style={styles.loadingWrap}>
+            <ActivityIndicator color={colors.primary} />
+            <Text style={styles.hint}>Finding your location…</Text>
+          </View>
+        ) : (
+          <>
+            <WebView
+              style={StyleSheet.absoluteFill}
+              originWhitelist={['*']}
+              source={{ html: htmlRef.current }}
+              onMessage={handleMessage}
+              javaScriptEnabled
+              domStorageEnabled
+            />
+            <View pointerEvents="none" style={styles.pinWrap}>
+              <Text style={styles.pin}>📍</Text>
+            </View>
+          </>
+        )}
       </View>
       <View style={styles.footer}>
         <Text style={styles.hint}>Move the map so the pin sits on your delivery location.</Text>
@@ -100,6 +135,7 @@ export default function MapPickerScreen({ navigation, route }: Props) {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
   mapWrap: { flex: 1 },
+  loadingWrap: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: spacing.sm },
   pinWrap: {
     position: 'absolute',
     top: '50%',

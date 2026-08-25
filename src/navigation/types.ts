@@ -1,13 +1,16 @@
-export type AuthStackParamList = {
-  Login: undefined;
-  Signup: undefined;
-  ForgotPassword: undefined;
+import type { NavigatorScreenParams } from '@react-navigation/native';
+
+export type MainTabParamList = {
+  Home: undefined;
+  MyOrders: undefined;
+  More: undefined;
 };
 
 export type AppStackParamList = {
-  Menu: undefined;
+  MainTabs: NavigatorScreenParams<MainTabParamList> | undefined;
+  Categories: undefined;
+  CategoryItems: { title: string; items: import('../types').MenuItem[] };
   Cart: { selectedAddressId?: number } | undefined;
-  Orders: undefined;
   OrderDetail: { orderId: number };
   AddressList: { selectMode?: boolean } | undefined;
   AddressForm: {
@@ -17,4 +20,9 @@ export type AppStackParamList = {
   MapPicker: { initialCoords?: { latitude: number; longitude: number } } | undefined;
   TrackOrder: { orderId: number };
   Profile: undefined;
+  Login: undefined;
+  Signup: undefined;
+  ForgotPassword: undefined;
+  Notifications: undefined;
+  SelectOutlet: undefined;
 };
