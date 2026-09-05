@@ -13,6 +13,8 @@ import {
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import ScreenHeader from '../components/ScreenHeader';
 import { createAddress, updateAddress } from '../api/addresses';
+import { reverseGeocode } from '../api/geo';
+import { getCurrentCoords, requestLocationPermission } from '../utils/geolocation';
 import type { AppStackParamList } from '../navigation/types';
 import { colors, radius, spacing } from '../theme';
 
@@ -32,6 +34,7 @@ export default function AddressFormScreen({ navigation, route }: Props) {
     editing ? { latitude: editing.latitude, longitude: editing.longitude } : null
   );
   const [saving, setSaving] = useState(false);
+  const [locating, setLocating] = useState(false);
 
   useEffect(() => {
     if (route.params?.pickedCoords) {
@@ -39,15 +42,34 @@ export default function AddressFormScreen({ navigation, route }: Props) {
     }
   }, [route.params?.pickedCoords]);
 
+  async function useCurrentLocation() {
+    const ok = await requestLocationPermission();
+    if (!ok) {
+      Alert.alert('Location needed', 'Enable location access in Settings, or pick your spot on the map.');
+      return;
+    }
+    setLocating(true);
+    try {
+      const c = await getCurrentCoords();
+      setCoords(c);
+      const label = await reverseGeocode(c.latitude, c.longitude);
+      if (label && !addressLine1.trim()) setAddressLine1(label);
+    } catch {
+      Alert.alert('Could not get your location', 'Try again, or pick your spot on the map.');
+    } finally {
+      setLocating(false);
+    }
+  }
+
   async function handleSave() {
     if (!addressLine1.trim()) {
       Alert.alert('Address required', 'Enter your address (house/flat, street, area).');
       return;
     }
-    if (!coords && !city.trim() && !state.trim() && !pinCode.trim()) {
+    if (!coords) {
       Alert.alert(
         'Location required',
-        'Tap "Use current location", or fill in city, state and PIN code so we can look up this address.'
+        'Pick your location on the map (or use “Use current location”) so we can check it’s inside the delivery area.'
       );
       return;
     }
@@ -133,20 +155,32 @@ export default function AddressFormScreen({ navigation, route }: Props) {
           placeholderTextColor={colors.textMuted}
         />
 
-        <TouchableOpacity
-          style={styles.locationButton}
-          onPress={() => navigation.navigate('MapPicker', { initialCoords: coords ?? undefined })}
-          activeOpacity={0.85}
-        >
-          <Text style={styles.locationButtonText}>
-            {coords ? `Location set (${coords.latitude.toFixed(5)}, ${coords.longitude.toFixed(5)})` : '🗺️ Pick on map'}
-          </Text>
-        </TouchableOpacity>
-        {!coords && (
-          <Text style={styles.locationHint}>
-            No GPS? Pick your location on the map, or fill in city, state and PIN code above and we'll look it up for you.
-          </Text>
-        )}
+        <View style={styles.locationRow}>
+          <TouchableOpacity
+            style={[styles.locationButton, styles.locationButtonHalf]}
+            onPress={useCurrentLocation}
+            disabled={locating}
+            activeOpacity={0.85}
+          >
+            {locating ? (
+              <ActivityIndicator size="small" color={colors.primary} />
+            ) : (
+              <Text style={styles.locationButtonText}>◎ Use current location</Text>
+            )}
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.locationButton, styles.locationButtonHalf]}
+            onPress={() => navigation.navigate('MapPicker', { initialCoords: coords ?? undefined })}
+            activeOpacity={0.85}
+          >
+            <Text style={styles.locationButtonText}>🗺️ Pick on map</Text>
+          </TouchableOpacity>
+        </View>
+        <Text style={styles.locationHint}>
+          {coords
+            ? `Location set (${coords.latitude.toFixed(5)}, ${coords.longitude.toFixed(5)})`
+            : 'A precise location is required so we can confirm you’re inside the delivery area.'}
+        </Text>
 
         <View style={styles.switchRow}>
           <Text style={styles.fieldLabel}>Set as default address</Text>
@@ -177,17 +211,19 @@ const styles = StyleSheet.create({
   },
   row: { flexDirection: 'row', gap: spacing.sm },
   rowInput: { flex: 1 },
+  locationRow: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.xs },
   locationButton: {
     borderWidth: 1,
     borderColor: colors.primary,
     borderRadius: radius.sm,
     padding: 14,
     alignItems: 'center',
-    marginTop: spacing.xs,
-    marginBottom: spacing.sm,
+    justifyContent: 'center',
+    marginBottom: spacing.xs,
   },
-  locationButtonText: { color: colors.primary, fontWeight: '700' },
-  locationHint: { fontSize: 12, color: colors.textMuted, marginTop: -spacing.xs, marginBottom: spacing.sm },
+  locationButtonHalf: { flex: 1 },
+  locationButtonText: { color: colors.primary, fontWeight: '700', fontSize: 13, textAlign: 'center' },
+  locationHint: { fontSize: 12, color: colors.textMuted, marginBottom: spacing.sm },
   switchRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: spacing.sm },
   footer: {
     padding: spacing.md,

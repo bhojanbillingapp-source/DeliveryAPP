@@ -1,130 +1,150 @@
-import React, { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, View, Text, TouchableOpacity, StyleSheet } from 'react-native';
-import { WebView, WebViewMessageEvent } from 'react-native-webview';
+import React, { useCallback, useRef, useState } from 'react';
+import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
+import MapView, { Marker, PROVIDER_GOOGLE, MapPressEvent, Region } from 'react-native-maps';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import ScreenHeader from '../components/ScreenHeader';
 import type { AppStackParamList } from '../navigation/types';
 import { colors, radius, spacing } from '../theme';
 import { getCurrentCoords, requestLocationPermission } from '../utils/geolocation';
+import { reverseGeocode } from '../api/geo';
 
 type Props = NativeStackScreenProps<AppStackParamList, 'MapPicker'>;
 
 // India-wide fallback view when there's no GPS/initial coordinate to center on.
-const DEFAULT_COORDS = { latitude: 20.5937, longitude: 78.9629 };
-const DEFAULT_ZOOM = 5;
-const PICKED_ZOOM = 16;
-
-// Leaflet + OpenStreetMap tiles — no API key required, unlike react-native-maps
-// on Android which needs a billed Google Maps SDK key just to render tiles.
-function buildMapHtml(latitude: number, longitude: number, zoom: number): string {
-  return `<!DOCTYPE html>
-<html>
-<head>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-  <style>
-    html, body, #map { height: 100%; margin: 0; padding: 0; }
-  </style>
-</head>
-<body>
-  <div id="map"></div>
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-  <script>
-    const map = L.map('map', { zoomControl: false, attributionControl: false }).setView([${latitude}, ${longitude}], ${zoom});
-    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(map);
-
-    function post(center) {
-      window.ReactNativeWebView.postMessage(JSON.stringify({ latitude: center.lat, longitude: center.lng }));
-    }
-    map.on('moveend', () => post(map.getCenter()));
-    post(map.getCenter());
-  </script>
-</body>
-</html>`;
-}
+const INDIA: Region = { latitude: 20.5937, longitude: 78.9629, latitudeDelta: 24, longitudeDelta: 24 };
+// An empty style array doesn't reliably override Google Maps' own
+// "match the app's night theme" auto-styling on Android — an explicit,
+// non-empty light style does.
+const LIGHT_MAP_STYLE = [
+  { elementType: 'geometry', stylers: [{ color: '#f5f5f5' }] },
+  { elementType: 'labels.icon', stylers: [{ visibility: 'on' }] },
+  { elementType: 'labels.text.fill', stylers: [{ color: '#616161' }] },
+  { elementType: 'labels.text.stroke', stylers: [{ color: '#f5f5f5' }] },
+  { featureType: 'administrative.land_parcel', elementType: 'labels.text.fill', stylers: [{ color: '#bdbdbd' }] },
+  { featureType: 'poi', elementType: 'geometry', stylers: [{ color: '#eeeeee' }] },
+  { featureType: 'poi', elementType: 'labels.text.fill', stylers: [{ color: '#757575' }] },
+  { featureType: 'poi.park', elementType: 'geometry', stylers: [{ color: '#e5e5e5' }] },
+  { featureType: 'poi.park', elementType: 'labels.text.fill', stylers: [{ color: '#9e9e9e' }] },
+  // Roads need their own explicit geometry colors — without these, the
+  // blanket geometry rule above paints roads the exact same shade as the
+  // surrounding landscape and they visually disappear (this was the "roads
+  // not showing properly" bug).
+  { featureType: 'road', elementType: 'geometry', stylers: [{ color: '#ffffff' }] },
+  { featureType: 'road.arterial', elementType: 'labels.text.fill', stylers: [{ color: '#757575' }] },
+  { featureType: 'road.highway', elementType: 'geometry', stylers: [{ color: '#dadada' }] },
+  { featureType: 'road.highway', elementType: 'labels.text.fill', stylers: [{ color: '#616161' }] },
+  { featureType: 'road.local', elementType: 'labels.text.fill', stylers: [{ color: '#9e9e9e' }] },
+  { featureType: 'transit.line', elementType: 'geometry', stylers: [{ color: '#e5e5e5' }] },
+  { featureType: 'transit.station', elementType: 'geometry', stylers: [{ color: '#eeeeee' }] },
+  { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#c9c9c9' }] },
+  { featureType: 'water', elementType: 'labels.text.fill', stylers: [{ color: '#9e9e9e' }] },
+];
 
 export default function MapPickerScreen({ navigation, route }: Props) {
   const initial = route.params?.initialCoords;
+  const mapRef = useRef<MapView | null>(null);
 
-  const [coords, setCoords] = useState(initial ?? DEFAULT_COORDS);
-  const [locating, setLocating] = useState(!initial);
-  const htmlRef = useRef(initial ? buildMapHtml(initial.latitude, initial.longitude, PICKED_ZOOM) : null);
+  const [pin, setPin] = useState<{ latitude: number; longitude: number } | null>(initial ?? null);
+  const [address, setAddress] = useState<string | null>(null);
+  const [reverseBusy, setReverseBusy] = useState(false);
+  const [locating, setLocating] = useState(false);
 
-  useEffect(() => {
-    if (initial) return;
-    let cancelled = false;
-    (async () => {
-      const allowed = await requestLocationPermission();
-      if (!allowed || cancelled) {
-        setLocating(false);
-        return;
-      }
-      try {
-        const current = await getCurrentCoords();
-        if (cancelled) return;
-        setCoords(current);
-        htmlRef.current = buildMapHtml(current.latitude, current.longitude, PICKED_ZOOM);
-      } catch {
-        // Fall back to the India-wide default view already set.
-      } finally {
-        if (!cancelled) setLocating(false);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+  const resolveAddress = useCallback((lat: number, lng: number) => {
+    setReverseBusy(true);
+    reverseGeocode(lat, lng)
+      .then(setAddress)
+      .finally(() => setReverseBusy(false));
   }, []);
 
-  function handleMessage(event: WebViewMessageEvent) {
-    try {
-      const data = JSON.parse(event.nativeEvent.data);
-      if (typeof data.latitude === 'number' && typeof data.longitude === 'number') {
-        setCoords({ latitude: data.latitude, longitude: data.longitude });
-      }
-    } catch {
-      // ignore malformed messages
-    }
-  }
+  const movePin = useCallback(
+    (latitude: number, longitude: number) => {
+      setPin({ latitude, longitude });
+      resolveAddress(latitude, longitude);
+    },
+    [resolveAddress],
+  );
 
-  function handleConfirm() {
-    // React Navigation v7's `navigate` always pushes a new screen instead of
-    // returning to an existing instance in the stack — using it here would
-    // stack a second AddressForm on top of the one the user came from, so
-    // Save would only pop back to this map screen instead of reaching
-    // AddressList. `popTo` pops back to the original AddressForm and merges
-    // the picked coords into its params.
-    navigation.popTo('AddressForm', { pickedCoords: coords }, { merge: true });
-  }
+  // "Locate me" always available — including when editing an existing address
+  // (the old screen early-returned and could never re-center to current GPS).
+  const locateMe = useCallback(async () => {
+    const ok = await requestLocationPermission();
+    if (!ok) return;
+    setLocating(true);
+    try {
+      const c = await getCurrentCoords();
+      movePin(c.latitude, c.longitude);
+      mapRef.current?.animateToRegion(
+        { ...c, latitudeDelta: 0.01, longitudeDelta: 0.01 },
+        400,
+      );
+    } catch {
+      // keep whatever the map is showing
+    } finally {
+      setLocating(false);
+    }
+  }, [movePin]);
+
+  const handleConfirm = () => {
+    if (!pin) return;
+    // React Navigation v7's `navigate` always pushes a new screen; `popTo`
+    // returns to the original AddressForm and merges the picked coords.
+    navigation.popTo('AddressForm', { pickedCoords: pin }, { merge: true });
+  };
+
+  const initialRegion: Region = initial
+    ? { ...initial, latitudeDelta: 0.02, longitudeDelta: 0.02 }
+    : INDIA;
 
   return (
     <View style={styles.container}>
       <ScreenHeader title="Pick your location" onBack={() => navigation.goBack()} />
+
       <View style={styles.mapWrap}>
-        {locating || !htmlRef.current ? (
-          <View style={styles.loadingWrap}>
-            <ActivityIndicator color={colors.primary} />
-            <Text style={styles.hint}>Finding your location…</Text>
-          </View>
-        ) : (
-          <>
-            <WebView
-              style={StyleSheet.absoluteFill}
-              originWhitelist={['*']}
-              source={{ html: htmlRef.current }}
-              onMessage={handleMessage}
-              javaScriptEnabled
-              domStorageEnabled
+        <MapView
+          ref={mapRef}
+          provider={PROVIDER_GOOGLE}
+          style={StyleSheet.absoluteFill}
+          initialRegion={initialRegion}
+          customMapStyle={LIGHT_MAP_STYLE}
+          onPress={(e: MapPressEvent) =>
+            movePin(e.nativeEvent.coordinate.latitude, e.nativeEvent.coordinate.longitude)
+          }
+        >
+          {pin && (
+            <Marker
+              coordinate={pin}
+              draggable
+              onDragEnd={(e) =>
+                movePin(e.nativeEvent.coordinate.latitude, e.nativeEvent.coordinate.longitude)
+              }
+              pinColor={colors.accent}
             />
-            <View pointerEvents="none" style={styles.pinWrap}>
-              <Text style={styles.pin}>📍</Text>
-            </View>
-          </>
-        )}
+          )}
+        </MapView>
+
+        <TouchableOpacity style={styles.locateBtn} onPress={locateMe} activeOpacity={0.85}>
+          {locating ? (
+            <ActivityIndicator size="small" color={colors.primary} />
+          ) : (
+            <Text style={styles.locateBtnText}>◎ Locate me</Text>
+          )}
+        </TouchableOpacity>
       </View>
+
       <View style={styles.footer}>
-        <Text style={styles.hint}>Move the map so the pin sits on your delivery location.</Text>
-        <TouchableOpacity style={styles.confirmButton} onPress={handleConfirm} activeOpacity={0.85}>
+        <Text style={styles.hint}>
+          {pin
+            ? reverseBusy
+              ? 'Looking up address…'
+              : address || 'Tap the map or drag the pin to your exact delivery spot.'
+            : 'Tap the map or use “Locate me” to drop a pin on your delivery address.'}
+        </Text>
+        <TouchableOpacity
+          style={[styles.confirmButton, !pin && styles.confirmButtonDisabled]}
+          onPress={handleConfirm}
+          disabled={!pin}
+          activeOpacity={0.85}
+        >
           <Text style={styles.confirmButtonText}>Confirm this location</Text>
         </TouchableOpacity>
       </View>
@@ -135,23 +155,26 @@ export default function MapPickerScreen({ navigation, route }: Props) {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
   mapWrap: { flex: 1 },
-  loadingWrap: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: spacing.sm },
-  pinWrap: {
+  locateBtn: {
     position: 'absolute',
-    top: '50%',
-    left: '50%',
-    marginLeft: -16,
-    marginTop: -32,
-    alignItems: 'center',
+    right: spacing.md,
+    bottom: spacing.md,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.sm,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
   },
-  pin: { fontSize: 32 },
+  locateBtnText: { color: colors.primary, fontWeight: '700' },
   footer: {
     padding: spacing.md,
     backgroundColor: colors.surface,
     borderTopWidth: 1,
     borderTopColor: colors.border,
   },
-  hint: { color: colors.textMuted, fontSize: 13, textAlign: 'center', marginBottom: spacing.sm },
+  hint: { color: colors.textMuted, fontSize: 13, textAlign: 'center', marginBottom: spacing.sm, minHeight: 34 },
   confirmButton: { backgroundColor: colors.accent, borderRadius: radius.sm, padding: 16, alignItems: 'center' },
+  confirmButtonDisabled: { opacity: 0.5 },
   confirmButtonText: { color: '#fff', fontWeight: '700', fontSize: 16 },
 });

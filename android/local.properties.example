@@ -1,7 +1,8 @@
 # Copy this to android/local.properties (gitignored) — Android Studio
 # usually generates that file with sdk.dir already; just add this line to it.
 #
-# Google Maps API key used by react-native-maps on Android (the manual
-# "pick on map" delivery-address picker). Needs Maps SDK for Android enabled
-# on the key — see the setup guide in the app's docs/chat for how to create one.
+# Google Maps API key used by react-native-maps on Android — both the
+# "pick on map" delivery-address picker AND the live order-tracking map.
+# Needs "Maps SDK for Android" enabled; restrict it to this app's package
+# name + signing SHA-1. iOS uses a separate key in ios/CustomerApp/Info.plist.
 MAPS_API_KEY=
