@@ -35,11 +35,15 @@
 		<true/>
 	</dict>
 	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>Used to fill in your delivery address with your current location.</string>
+	<string>Used to set your delivery address and show your order on the map while it is on the way.</string>
 	<key>UIAppFonts</key>
 	<array>
 		<string>Ionicons.ttf</string>
 	</array>
+	<!-- Google Maps SDK for iOS key (react-native-maps PROVIDER_GOOGLE).
+	     Replace with a billing-enabled key restricted to this bundle id. -->
+	<key>GMSApiKey</key>
+	<string></string>
 	<key>UILaunchStoryboardName</key>
 	<string>LaunchScreen</string>
 	<key>UIRequiredDeviceCapabilities</key>

@@ -3,6 +3,26 @@
 Living doc for AI assistants working on this repo. Update the "Next Up" section
 as new work is scoped; keep "Done" in sync with what's actually shipped.
 
+> **CORRECTIONS (2026-09-03) — parts of the sections below are now stale:**
+> - Backend endpoints are `/api/customer-order/*` (**singular**), base
+>   `API_HOST` from `.env` (default `http://10.0.2.2:8080`). The `/customer-orders/*`
+>   plural spellings below are wrong.
+> - **Map picker** (`MapPickerScreen`) is now a real `react-native-maps`
+>   (`PROVIDER_GOOGLE`) map with a draggable marker + "Locate me" + reverse-geocode
+>   (`GET /api/customer-order/geo/reverse`). Needs `MAPS_API_KEY` in
+>   `android/local.properties` and `GMSApiKey` in `ios/CustomerApp/Info.plist`.
+> - **Address form** now *requires* coordinates and has a "Use current location"
+>   button (`utils/geolocation.ts` — iOS permission is now actually checked).
+> - **Order tracking** (`TrackOrderScreen`) is a real embedded `DeliveryMap`
+>   (moving rider, destination, restaurant, road-route polyline from the backend,
+>   stale state, masked "call partner"). Still poll-only (no customer sockets)
+>   but now `GET /api/customer-order/orders/:orderId/track?since=<iso>` returns
+>   `{ changed: false }` when nothing moved; poll is 12s and pauses on
+>   `AppState !== 'active'`. **No ETA** is shown (product decision).
+>   Track payload: `{ status, status_label, changed, location, destination,
+>   origin, route_polyline, route_distance_km, is_stale, last_recorded_at,
+>   delivery_partner_first_name, delivery_partner_phone_masked }`.
+
 ## What this is
 
 `CustomerApp` — a React Native (0.87, RN CLI, not Expo) customer-facing mobile

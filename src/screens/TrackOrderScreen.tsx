@@ -1,7 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Linking } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Linking, AppState } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import ScreenHeader from '../components/ScreenHeader';
+import DeliveryMap from '../components/DeliveryMap';
 import { trackOrder, TrackingInfo } from '../api/tracking';
 import type { AppStackParamList } from '../navigation/types';
 import { colors, radius, spacing } from '../theme';
@@ -18,45 +19,81 @@ const STATUS_LABELS: Record<string, string> = {
 };
 
 const TERMINAL_STATUSES = ['DELIVERED', 'RETURNED'];
-const POLL_INTERVAL_MS = 8000;
+const POLL_INTERVAL_MS = 10000;
+
+function updatedAgo(iso: string | null): string {
+  if (!iso) return '';
+  const s = Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 1000));
+  if (s < 60) return `Updated ${s}s ago`;
+  const m = Math.floor(s / 60);
+  return m < 60 ? `Updated ${m}m ago` : `Updated ${Math.floor(m / 60)}h ago`;
+}
 
 export default function TrackOrderScreen({ navigation, route }: Props) {
   const { orderId } = route.params;
   const [info, setInfo] = useState<TrackingInfo | null>(null);
   const [loading, setLoading] = useState(true);
-  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [error, setError] = useState(false);
+  const sinceRef = useRef<string | null>(null);
+  const stoppedRef = useRef(false);
 
   useEffect(() => {
     let cancelled = false;
+    let interval: ReturnType<typeof setInterval> | null = null;
 
     async function poll() {
       try {
-        const data = await trackOrder(orderId);
+        const data = await trackOrder(orderId, sinceRef.current);
         if (cancelled) return;
-        setInfo(data);
+        setError(false);
         setLoading(false);
-        if (data.status && TERMINAL_STATUSES.includes(data.status) && intervalRef.current) {
-          clearInterval(intervalRef.current);
-          intervalRef.current = null;
+        if (data) {
+          setInfo(data);
+          sinceRef.current = data.lastRecordedAt ?? sinceRef.current;
+          if (data.status && TERMINAL_STATUSES.includes(data.status)) {
+            stoppedRef.current = true;
+            if (interval) { clearInterval(interval); interval = null; }
+          }
         }
       } catch {
-        if (!cancelled) setLoading(false);
+        if (!cancelled) {
+          setError(true);
+          setLoading(false);
+        }
       }
     }
 
-    poll();
-    intervalRef.current = setInterval(poll, POLL_INTERVAL_MS);
+    function start() {
+      if (stoppedRef.current || interval) return;
+      poll();
+      interval = setInterval(poll, POLL_INTERVAL_MS);
+    }
+    function stop() {
+      if (interval) { clearInterval(interval); interval = null; }
+    }
+
+    start();
+    const sub = AppState.addEventListener('change', (s) => {
+      if (s === 'active') start();
+      else stop();
+    });
+
     return () => {
       cancelled = true;
-      if (intervalRef.current) clearInterval(intervalRef.current);
+      stop();
+      sub.remove();
     };
   }, [orderId]);
 
-  function openInMaps() {
-    if (!info?.location) return;
-    const { latitude, longitude } = info.location;
-    Linking.openURL(`https://www.google.com/maps?q=${latitude},${longitude}`);
-  }
+  const status = info?.status ?? null;
+  const isLive = !!info?.location && !info.isStale;
+
+  const callPartner = () => {
+    if (!info?.partnerPhoneMasked) return;
+    // The masked string isn't dialable — the backend exposes a tel: deep link
+    // only when it chooses to; fall back to nothing if absent.
+    Linking.openURL(`tel:${info.partnerPhoneMasked.replace(/[^\d+]/g, '')}`).catch(() => {});
+  };
 
   function callRider() {
     if (!info?.delivery_boy_phone) return;
@@ -71,26 +108,50 @@ export default function TrackOrderScreen({ navigation, route }: Props) {
           <ActivityIndicator size="large" color={colors.primary} />
         </View>
       ) : (
-        <View style={{ padding: spacing.md }}>
+        <View style={{ padding: spacing.md, flex: 1 }}>
           <View style={styles.card}>
             <Text style={styles.statusText}>
-              {info?.status ? STATUS_LABELS[info.status] || info.status : 'Waiting for a delivery partner to be assigned'}
+              {info?.statusLabel || (status ? STATUS_LABELS[status] || status : null) || 'Waiting for a delivery partner'}
             </Text>
-            {!!info?.delivery_boy_name && <Text style={styles.meta}>Delivery partner: {info.delivery_boy_name}</Text>}
+            <Text style={styles.meta}>
+              {error
+                ? "Couldn't refresh — retrying…"
+                : info?.location
+                  ? isLive
+                    ? `Live · ${updatedAgo(info.lastRecordedAt)}`
+                    : 'Location temporarily unavailable'
+                  : 'Not out for delivery yet'}
+              {info?.routeDistanceKm != null ? ` · ${info.routeDistanceKm.toFixed(1)} km away` : ''}
+            </Text>
+
             {!!info?.delivery_boy_name && (
-              <View style={styles.actionRow}>
-                {!!info?.delivery_boy_phone && (
-                  <TouchableOpacity style={[styles.callButton, styles.actionButton]} onPress={callRider} activeOpacity={0.85}>
-                    <Text style={styles.callButtonText}>📞 Call</Text>
+              <>
+                <Text style={styles.meta}>Delivery partner: {info.delivery_boy_name}</Text>
+                <View style={styles.actionRow}>
+                  {!!info?.delivery_boy_phone && (
+                    <TouchableOpacity style={[styles.callButton, styles.actionButton]} onPress={callRider} activeOpacity={0.85}>
+                      <Text style={styles.callButtonText}>📞 Call</Text>
+                    </TouchableOpacity>
+                  )}
+                  <TouchableOpacity
+                    style={[styles.chatButton, styles.actionButton]}
+                    onPress={() => navigation.navigate('DeliveryChat', { orderId })}
+                    activeOpacity={0.85}
+                  >
+                    <Text style={styles.chatButtonText}>💬 Chat</Text>
+                  </TouchableOpacity>
+                </View>
+              </>
+            )}
+
+            {!info?.delivery_boy_name && !!info?.partnerFirstName && (
+              <View style={styles.partnerRow}>
+                <Text style={styles.meta}>Delivery partner: {info.partnerFirstName}</Text>
+                {!!info.partnerPhoneMasked && (
+                  <TouchableOpacity onPress={callPartner}>
+                    <Text style={styles.callLink}>Call {info.partnerPhoneMasked}</Text>
                   </TouchableOpacity>
                 )}
-                <TouchableOpacity
-                  style={[styles.chatButton, styles.actionButton]}
-                  onPress={() => navigation.navigate('DeliveryChat', { orderId })}
-                  activeOpacity={0.85}
-                >
-                  <Text style={styles.chatButtonText}>💬 Chat</Text>
-                </TouchableOpacity>
               </View>
             )}
           </View>
@@ -114,18 +175,14 @@ export default function TrackOrderScreen({ navigation, route }: Props) {
             </View>
           )}
 
-          {info?.location ? (
-            <View style={styles.card}>
-              <Text style={styles.meta}>Last updated {new Date(info.location.recorded_at).toLocaleTimeString()}</Text>
-              <TouchableOpacity style={styles.mapButton} onPress={openInMaps} activeOpacity={0.85}>
-                <Text style={styles.mapButtonText}>📍 View live location in Maps</Text>
-              </TouchableOpacity>
-            </View>
-          ) : (
-            <View style={styles.card}>
-              <Text style={styles.meta}>No live location yet — check back once your order is on the way.</Text>
-            </View>
-          )}
+          <DeliveryMap
+            rider={info?.location ?? null}
+            destination={info?.destination ?? null}
+            origin={info?.origin ?? null}
+            routePolyline={info?.routePolyline}
+            isStale={!!info?.isStale}
+            height={360}
+          />
         </View>
       )}
     </View>
@@ -158,12 +215,12 @@ const styles = StyleSheet.create({
   timelineLine: { flex: 1, width: 2, backgroundColor: colors.border, marginVertical: 2 },
   timelineTextCol: { flex: 1, paddingBottom: spacing.sm, paddingLeft: spacing.sm },
   timelineStatus: { fontSize: 14, fontWeight: '600', color: colors.text },
-  mapButton: { backgroundColor: colors.accent, borderRadius: radius.sm, padding: 14, alignItems: 'center', marginTop: spacing.sm },
-  mapButtonText: { color: '#fff', fontWeight: '700' },
   actionRow: { flexDirection: 'row', marginTop: spacing.sm },
   actionButton: { flex: 1 },
   callButton: { backgroundColor: colors.primary, borderRadius: radius.sm, padding: 14, alignItems: 'center', marginRight: spacing.sm },
   callButtonText: { color: '#fff', fontWeight: '700' },
   chatButton: { backgroundColor: colors.accent, borderRadius: radius.sm, padding: 14, alignItems: 'center' },
   chatButtonText: { color: '#fff', fontWeight: '700' },
+  partnerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 8 },
+  callLink: { fontSize: 13, color: colors.primary, fontWeight: '700' },
 });

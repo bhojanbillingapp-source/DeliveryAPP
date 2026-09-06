@@ -8,6 +8,12 @@ require Pod::Executable.execute_command('node', ['-p',
 platform :ios, min_ios_version_supported
 prepare_react_native_project!
 
+# react-native-maps with the Google Maps provider on iOS (PROVIDER_GOOGLE).
+# The API key is supplied at runtime in AppDelegate.swift (GMSServices.provideAPIKey),
+# read from Info.plist -> GMSApiKey. Set that value before an iOS build.
+rn_maps_path = '../node_modules/react-native-maps'
+pod 'react-native-google-maps', :path => rn_maps_path
+
 linkage = ENV['USE_FRAMEWORKS']
 if linkage != nil
   Pod::UI.puts "Configuring Pod with #{linkage}ally linked Frameworks".green
