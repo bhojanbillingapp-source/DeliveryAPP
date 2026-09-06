@@ -22,7 +22,12 @@ export type CouponPreview = {
 export async function previewCoupons(outletId: string, lines: CartLine[], code?: string): Promise<CouponPreview> {
   const { data } = await api.post('/customer-order/coupons/preview', {
     outlet_id: outletId,
-    items: lines.map(l => ({ item_id: l.item_id, quantity: l.quantity, variant_label: l.variant_label })),
+    items: lines.map(l => ({
+      item_id: l.item_id,
+      quantity: l.quantity,
+      variant_label: l.variant_label,
+      add_on_ids: l.add_ons?.map(a => a.id),
+    })),
     code,
   });
   return data;

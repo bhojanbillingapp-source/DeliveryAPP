@@ -1,19 +1,27 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { View, Text, FlatList, TouchableOpacity, StyleSheet, ActivityIndicator, RefreshControl } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
+import type { CompositeScreenProps } from '@react-navigation/native';
+import type { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
 import api from '../api/client';
+import { useCart } from '../context/CartContext';
 import { useOutlet } from '../context/OutletContext';
 import { useOrderType } from '../context/OrderTypeContext';
 import ScreenHeader from '../components/ScreenHeader';
-import type { AppStackParamList } from '../navigation/types';
+import type { AppStackParamList, MainTabParamList } from '../navigation/types';
+import { CART_BAR_CLEARANCE } from '../navigation/tabBarConfig';
 import type { MenuItem } from '../types';
 import { colors, radius, spacing } from '../theme';
 
-type Props = NativeStackScreenProps<AppStackParamList, 'Categories'>;
+type Props = CompositeScreenProps<
+  BottomTabScreenProps<MainTabParamList, 'Categories'>,
+  NativeStackScreenProps<AppStackParamList>
+>;
 
 const UNCATEGORIZED = 'Other';
 
 export default function CategoriesScreen({ navigation }: Props) {
+  const { itemCount } = useCart();
   const { selectedOutlet } = useOutlet();
   const { orderType } = useOrderType();
   const [items, setItems] = useState<MenuItem[]>([]);
@@ -30,7 +38,11 @@ export default function CategoriesScreen({ navigation }: Props) {
       const { data } = await api.get('/ordermenu', {
         params: { outlet_id: outletId, order_type: orderType },
       });
-      setItems(data.filter((item: MenuItem) => item.is_active && item.price != null));
+      // Keep items with no delivery price/active variant in the list rather
+      // than hiding them — CategoryItemsScreen shows them as "Unavailable"
+      // so the customer sees they exist but can't add them, instead of the
+      // item silently vanishing.
+      setItems(data.filter((item: MenuItem) => item.is_active));
     } catch (err: any) {
       setError(err?.response?.data?.message || 'Could not load the menu.');
     } finally {
@@ -65,7 +77,7 @@ export default function CategoriesScreen({ navigation }: Props) {
 
   return (
     <View style={styles.container}>
-      <ScreenHeader title="Order Now" onBack={() => navigation.goBack()} />
+      <ScreenHeader title="Order Now" />
 
       {error && <Text style={styles.error}>{error}</Text>}
 
@@ -73,7 +85,7 @@ export default function CategoriesScreen({ navigation }: Props) {
         data={categories}
         keyExtractor={c => c.title}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); loadMenu(); }} />}
-        contentContainerStyle={{ padding: spacing.md }}
+        contentContainerStyle={{ padding: spacing.md, paddingBottom: itemCount > 0 ? CART_BAR_CLEARANCE : spacing.md }}
         renderItem={({ item }) => (
           <TouchableOpacity
             style={styles.row}

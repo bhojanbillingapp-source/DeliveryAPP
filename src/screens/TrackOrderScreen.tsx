@@ -58,6 +58,11 @@ export default function TrackOrderScreen({ navigation, route }: Props) {
     Linking.openURL(`https://www.google.com/maps?q=${latitude},${longitude}`);
   }
 
+  function callRider() {
+    if (!info?.delivery_boy_phone) return;
+    Linking.openURL(`tel:${info.delivery_boy_phone}`);
+  }
+
   return (
     <View style={styles.container}>
       <ScreenHeader title="Track Order" onBack={() => navigation.goBack()} />
@@ -72,7 +77,42 @@ export default function TrackOrderScreen({ navigation, route }: Props) {
               {info?.status ? STATUS_LABELS[info.status] || info.status : 'Waiting for a delivery partner to be assigned'}
             </Text>
             {!!info?.delivery_boy_name && <Text style={styles.meta}>Delivery partner: {info.delivery_boy_name}</Text>}
+            {!!info?.delivery_boy_name && (
+              <View style={styles.actionRow}>
+                {!!info?.delivery_boy_phone && (
+                  <TouchableOpacity style={[styles.callButton, styles.actionButton]} onPress={callRider} activeOpacity={0.85}>
+                    <Text style={styles.callButtonText}>📞 Call</Text>
+                  </TouchableOpacity>
+                )}
+                <TouchableOpacity
+                  style={[styles.chatButton, styles.actionButton]}
+                  onPress={() => navigation.navigate('DeliveryChat', { orderId })}
+                  activeOpacity={0.85}
+                >
+                  <Text style={styles.chatButtonText}>💬 Chat</Text>
+                </TouchableOpacity>
+              </View>
+            )}
           </View>
+
+          {!!info?.history?.length && (
+            <View style={styles.card}>
+              {info.history.map((entry, idx) => (
+                <View key={`${entry.status}-${entry.created_at}`} style={styles.timelineRow}>
+                  <View style={styles.timelineMarkerCol}>
+                    <View style={[styles.timelineDot, idx === info.history.length - 1 && styles.timelineDotActive]} />
+                    {idx < info.history.length - 1 && <View style={styles.timelineLine} />}
+                  </View>
+                  <View style={styles.timelineTextCol}>
+                    <Text style={styles.timelineStatus}>{STATUS_LABELS[entry.status] || entry.status}</Text>
+                    <Text style={styles.meta}>
+                      {new Date(entry.created_at).toLocaleString()}
+                    </Text>
+                  </View>
+                </View>
+              ))}
+            </View>
+          )}
 
           {info?.location ? (
             <View style={styles.card}>
@@ -105,6 +145,25 @@ const styles = StyleSheet.create({
   },
   statusText: { fontSize: 16, fontWeight: '700', color: colors.text },
   meta: { fontSize: 13, color: colors.textMuted, marginTop: 4 },
+  timelineRow: { flexDirection: 'row' },
+  timelineMarkerCol: { width: 20, alignItems: 'center' },
+  timelineDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: colors.border,
+    marginTop: 4,
+  },
+  timelineDotActive: { backgroundColor: colors.primary },
+  timelineLine: { flex: 1, width: 2, backgroundColor: colors.border, marginVertical: 2 },
+  timelineTextCol: { flex: 1, paddingBottom: spacing.sm, paddingLeft: spacing.sm },
+  timelineStatus: { fontSize: 14, fontWeight: '600', color: colors.text },
   mapButton: { backgroundColor: colors.accent, borderRadius: radius.sm, padding: 14, alignItems: 'center', marginTop: spacing.sm },
   mapButtonText: { color: '#fff', fontWeight: '700' },
+  actionRow: { flexDirection: 'row', marginTop: spacing.sm },
+  actionButton: { flex: 1 },
+  callButton: { backgroundColor: colors.primary, borderRadius: radius.sm, padding: 14, alignItems: 'center', marginRight: spacing.sm },
+  callButtonText: { color: '#fff', fontWeight: '700' },
+  chatButton: { backgroundColor: colors.accent, borderRadius: radius.sm, padding: 14, alignItems: 'center' },
+  chatButtonText: { color: '#fff', fontWeight: '700' },
 });

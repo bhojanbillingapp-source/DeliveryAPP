@@ -1,6 +1,7 @@
 apply plugin: "com.android.application"
 apply plugin: "org.jetbrains.kotlin.android"
 apply plugin: "com.facebook.react"
+apply from: "../../node_modules/react-native-vector-icons/fonts.gradle"
 
 // MAPS_API_KEY comes from android/local.properties (gitignored, unlike
 // gradle.properties) so the real key never lands in git — see
@@ -96,7 +97,9 @@ android {
         versionCode 1
         versionName "1.0"
         // Fills the com.google.android.geo.API_KEY meta-data in AndroidManifest.xml.
-        manifestPlaceholders = [MAPS_API_KEY: mapsApiKey]
+        // usesCleartextTraffic is "true" because the backend is served over plain
+        // http:// (see .env API_HOST) — switch to "false" once it's behind https.
+        manifestPlaceholders = [MAPS_API_KEY: mapsApiKey, usesCleartextTraffic: "true"]
     }
     signingConfigs {
         debug {

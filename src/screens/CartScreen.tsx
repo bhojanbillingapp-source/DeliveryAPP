@@ -6,6 +6,7 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import api from '../api/client';
 import { listAddresses } from '../api/addresses';
 import { previewCoupons, type Coupon } from '../api/coupons';
+import { validateCart } from '../api/cart';
 import { useCart } from '../context/CartContext';
 import { useAuth } from '../context/AuthContext';
 import { useOutlet } from '../context/OutletContext';
@@ -28,6 +29,8 @@ export default function CartScreen({ navigation, route }: Props) {
   const [addresses, setAddresses] = useState<Address[]>([]);
   const [selectedAddressId, setSelectedAddressId] = useState<number | null>(null);
 
+  const [unavailableKeys, setUnavailableKeys] = useState<Set<string>>(new Set());
+
   const [availableCoupons, setAvailableCoupons] = useState<Coupon[]>([]);
   const [appliedCoupon, setAppliedCoupon] = useState<Coupon | null>(null);
   const [couponCode, setCouponCode] = useState('');
@@ -36,6 +39,33 @@ export default function CartScreen({ navigation, route }: Props) {
   const [couponPanelOpen, setCouponPanelOpen] = useState(false);
 
   const outletId = selectedOutlet?.outlet_id ?? null;
+
+  function availabilityKey(itemId: number, variantLabel?: string) {
+    return `${itemId}::${variantLabel || ''}`;
+  }
+
+  useFocusEffect(
+    React.useCallback(() => {
+      if (!outletId || !lines.length) {
+        setUnavailableKeys(new Set());
+        return;
+      }
+      let cancelled = false;
+      validateCart(outletId, lines)
+        .then(results => {
+          if (cancelled) return;
+          const bad = new Set(
+            results.filter(r => !r.available).map(r => availabilityKey(r.item_id, r.variant_label || undefined))
+          );
+          setUnavailableKeys(bad);
+        })
+        .catch(() => {});
+      return () => {
+        cancelled = true;
+      };
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [outletId, lines])
+  );
 
   useEffect(() => {
     if (!outletId || !lines.length) {
@@ -126,8 +156,14 @@ export default function CartScreen({ navigation, route }: Props) {
 
   const selectedAddress = addresses.find(a => a.address_id === selectedAddressId) || null;
 
+  const hasUnavailableItems = lines.some(l => unavailableKeys.has(availabilityKey(l.item_id, l.variant_label)));
+
   async function placeOrder() {
     if (!lines.length) return;
+    if (hasUnavailableItems) {
+      Alert.alert('Remove unavailable items', 'Some items in your cart are no longer available. Remove them to continue.');
+      return;
+    }
     if (!customer) {
       navigation.navigate('Login');
       return;
@@ -147,6 +183,7 @@ export default function CartScreen({ navigation, route }: Props) {
           quantity: l.quantity,
           variant_label: l.variant_label,
           cooking_note: l.note,
+          add_on_ids: l.add_ons?.map(a => a.id),
         })),
         payment_method: 'COD',
         address_id: selectedAddressId,
@@ -173,34 +210,51 @@ export default function CartScreen({ navigation, route }: Props) {
         data={lines}
         keyExtractor={l => l.cart_key}
         contentContainerStyle={{ padding: spacing.md }}
-        renderItem={({ item }) => (
-          <View style={styles.card}>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.itemName}>{item.item_name}</Text>
-              {!!item.variant_label && <Text style={styles.itemVariant}>{item.variant_label}</Text>}
-              <TextInput
-                style={styles.itemNoteInput}
-                placeholder="Add a note, e.g. less spicy (optional)"
-                placeholderTextColor={colors.textMuted}
-                value={item.note ?? ''}
-                onChangeText={text => updateLineNote(item.cart_key, text)}
-              />
-              <Text style={styles.itemPrice}>₹{item.price} × {item.quantity} = ₹{(item.price * item.quantity).toFixed(2)}</Text>
-              <TouchableOpacity onPress={() => removeLine(item.cart_key)} hitSlop={HIT_SLOP} style={styles.removeTouch}>
-                <Text style={styles.remove}>Remove</Text>
-              </TouchableOpacity>
+        renderItem={({ item }) => {
+          const isUnavailable = unavailableKeys.has(availabilityKey(item.item_id, item.variant_label));
+          return (
+            <View style={[styles.card, isUnavailable && styles.cardUnavailable]}>
+              <View style={{ flex: 1 }}>
+                <View style={styles.itemNameRow}>
+                  <Text style={styles.itemName}>{item.item_name}</Text>
+                  {isUnavailable && (
+                    <View style={styles.unavailableBadge}>
+                      <Text style={styles.unavailableBadgeText}>Unavailable</Text>
+                    </View>
+                  )}
+                </View>
+                {!!item.variant_label && <Text style={styles.itemVariant}>{item.variant_label}</Text>}
+                {!!item.add_ons?.length && (
+                  <Text style={styles.itemAddOns}>+ {item.add_ons.map(a => a.name).join(', ')}</Text>
+                )}
+                {isUnavailable && (
+                  <Text style={styles.unavailableNote}>No longer available — please remove it to check out.</Text>
+                )}
+                <TextInput
+                  style={styles.itemNoteInput}
+                  placeholder="Add a note, e.g. less spicy (optional)"
+                  placeholderTextColor={colors.textMuted}
+                  value={item.note ?? ''}
+                  onChangeText={text => updateLineNote(item.cart_key, text)}
+                  editable={!isUnavailable}
+                />
+                <Text style={styles.itemPrice}>₹{item.price} × {item.quantity} = ₹{(item.price * item.quantity).toFixed(2)}</Text>
+                <TouchableOpacity onPress={() => removeLine(item.cart_key)} hitSlop={HIT_SLOP} style={styles.removeTouch}>
+                  <Text style={styles.remove}>Remove</Text>
+                </TouchableOpacity>
+              </View>
+              <View style={styles.qtyControls}>
+                <TouchableOpacity style={styles.qtyButton} onPress={() => decrementLine(item.cart_key)} hitSlop={HIT_SLOP} disabled={isUnavailable}>
+                  <Text style={styles.qtyButtonText}>−</Text>
+                </TouchableOpacity>
+                <Text style={styles.qtyValue}>{item.quantity}</Text>
+                <TouchableOpacity style={styles.qtyButton} onPress={() => incrementLine(item.cart_key)} hitSlop={HIT_SLOP} disabled={isUnavailable}>
+                  <Text style={styles.qtyButtonText}>+</Text>
+                </TouchableOpacity>
+              </View>
             </View>
-            <View style={styles.qtyControls}>
-              <TouchableOpacity style={styles.qtyButton} onPress={() => decrementLine(item.cart_key)} hitSlop={HIT_SLOP}>
-                <Text style={styles.qtyButtonText}>−</Text>
-              </TouchableOpacity>
-              <Text style={styles.qtyValue}>{item.quantity}</Text>
-              <TouchableOpacity style={styles.qtyButton} onPress={() => incrementLine(item.cart_key)} hitSlop={HIT_SLOP}>
-                <Text style={styles.qtyButtonText}>+</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        )}
+          );
+        }}
         ListEmptyComponent={<Text style={styles.empty}>Your cart is empty.</Text>}
       />
 
@@ -303,10 +357,13 @@ export default function CartScreen({ navigation, route }: Props) {
             <Text style={styles.totalAmount}>₹{finalTotal.toFixed(2)}</Text>
           </View>
           {customer && <Text style={styles.codNote}>Pay by Cash on Delivery</Text>}
+          {hasUnavailableItems && (
+            <Text style={styles.unavailableWarning}>Remove unavailable items to check out.</Text>
+          )}
           <TouchableOpacity
-            style={[styles.checkoutButton, placing && styles.checkoutButtonDisabled]}
+            style={[styles.checkoutButton, (placing || hasUnavailableItems) && styles.checkoutButtonDisabled]}
             onPress={placeOrder}
-            disabled={placing}
+            disabled={placing || hasUnavailableItems}
             activeOpacity={0.85}
           >
             {placing ? (
@@ -335,8 +392,20 @@ const styles = StyleSheet.create({
     padding: spacing.md,
     marginBottom: spacing.sm,
   },
+  cardUnavailable: { opacity: 0.65, borderColor: colors.danger },
+  itemNameRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
+  unavailableBadge: {
+    backgroundColor: colors.danger,
+    borderRadius: radius.sm,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+  },
+  unavailableBadgeText: { color: '#fff', fontSize: 10, fontWeight: '700' },
+  unavailableNote: { color: colors.danger, fontSize: 11, marginTop: 2 },
+  unavailableWarning: { color: colors.danger, fontSize: 13, fontWeight: '600', marginBottom: spacing.sm, textAlign: 'center' },
   itemName: { fontSize: 16, fontWeight: '700', color: colors.text },
   itemVariant: { fontSize: 13, color: colors.primary, fontWeight: '600', marginTop: 2 },
+  itemAddOns: { fontSize: 12, color: colors.textMuted, marginTop: 2 },
   itemNoteInput: {
     fontSize: 12,
     color: colors.text,

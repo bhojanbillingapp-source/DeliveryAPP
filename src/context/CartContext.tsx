@@ -1,9 +1,9 @@
 import React, { createContext, useContext, useMemo, useState } from 'react';
-import type { CartLine, MenuItem, MenuItemVariant } from '../types';
+import type { AddOn, CartLine, MenuItem, MenuItemVariant } from '../types';
 
 type CartContextValue = {
   lines: CartLine[];
-  addItem: (item: MenuItem, note?: string, variant?: MenuItemVariant) => void;
+  addItem: (item: MenuItem, note?: string, variant?: MenuItemVariant, addOns?: AddOn[]) => void;
   incrementLine: (cartKey: string) => void;
   decrementLine: (cartKey: string) => void;
   removeLine: (cartKey: string) => void;
@@ -18,10 +18,13 @@ const CartContext = createContext<CartContextValue | undefined>(undefined);
 export function CartProvider({ children }: { children: React.ReactNode }) {
   const [lines, setLines] = useState<CartLine[]>([]);
 
-  function addItem(item: MenuItem, note = '', variant?: MenuItemVariant) {
-    const price = variant?.price ?? item.price;
-    if (price == null) return;
-    const cartKey = `${item.id}::${variant?.label ?? 'default'}`;
+  function addItem(item: MenuItem, note = '', variant?: MenuItemVariant, addOns?: AddOn[]) {
+    const basePrice = variant?.price ?? item.price;
+    if (basePrice == null) return;
+    const addOnsPrice = (addOns ?? []).reduce((sum, a) => sum + (a.is_free ? 0 : Number(a.price)), 0);
+    const price = basePrice + addOnsPrice;
+    const addOnKey = (addOns ?? []).map(a => a.id).sort((a, b) => a - b).join(',');
+    const cartKey = `${item.id}::${variant?.label ?? 'default'}::${addOnKey}`;
     setLines(prev => {
       const existing = prev.find(l => l.cart_key === cartKey);
       if (existing) {
@@ -37,6 +40,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
           quantity: 1,
           variant_label: variant?.label,
           note: note.trim() || undefined,
+          add_ons: addOns && addOns.length ? addOns : undefined,
         },
       ];
     });

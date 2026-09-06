@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { Modal, View, Text, TextInput, TouchableOpacity, StyleSheet } from 'react-native';
-import type { MenuItemVariant } from '../types';
+import { Modal, View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
+import type { AddOn, MenuItemVariant } from '../types';
 import { colors, radius, spacing } from '../theme';
 
 type Props = {
@@ -8,24 +8,38 @@ type Props = {
   itemName: string;
   basePrice: number;
   variants?: MenuItemVariant[];
+  addOns?: AddOn[];
+  addOnsLoading?: boolean;
   onCancel: () => void;
-  onConfirm: (note: string, variant?: MenuItemVariant) => void;
+  onConfirm: (note: string, variant?: MenuItemVariant, addOns?: AddOn[]) => void;
 };
 
 const NOTE_CHIPS = ['No onion', 'Extra spicy', 'Less oil', 'No garlic'];
 
-export default function MenuItemModal({ visible, itemName, basePrice, variants, onCancel, onConfirm }: Props) {
+export default function MenuItemModal({ visible, itemName, basePrice, variants, addOns, addOnsLoading, onCancel, onConfirm }: Props) {
   const [note, setNote] = useState('');
   const [selectedVariant, setSelectedVariant] = useState<MenuItemVariant | undefined>(variants?.[0]);
+  const [selectedAddOns, setSelectedAddOns] = useState<AddOn[]>([]);
 
   // Re-seed the default selection whenever a different item's modal opens.
   useEffect(() => {
-    if (visible) setSelectedVariant(variants?.[0]);
+    if (visible) {
+      setSelectedVariant(variants?.[0]);
+      setSelectedAddOns([]);
+    }
   }, [visible, variants]);
 
   const parts = note.split(',').map(s => s.trim()).filter(Boolean);
   const hasVariants = Boolean(variants && variants.length > 0);
-  const price = selectedVariant?.price ?? basePrice;
+  const hasAddOns = Boolean(addOns && addOns.length > 0);
+  const addOnsPrice = selectedAddOns.reduce((sum, a) => sum + (a.is_free ? 0 : Number(a.price)), 0);
+  const price = (selectedVariant?.price ?? basePrice) + addOnsPrice;
+
+  function toggleAddOn(addOn: AddOn) {
+    setSelectedAddOns(prev =>
+      prev.some(a => a.id === addOn.id) ? prev.filter(a => a.id !== addOn.id) : [...prev, addOn]
+    );
+  }
 
   function toggleChip(chip: string) {
     const next = parts.includes(chip) ? parts.filter(p => p !== chip) : [...parts, chip];
@@ -40,7 +54,7 @@ export default function MenuItemModal({ visible, itemName, basePrice, variants, 
   function handleConfirm() {
     const finalNote = note.trim();
     setNote('');
-    onConfirm(finalNote, selectedVariant);
+    onConfirm(finalNote, selectedVariant, selectedAddOns);
   }
 
   return (
@@ -78,6 +92,41 @@ export default function MenuItemModal({ visible, itemName, basePrice, variants, 
                 })}
               </View>
             </>
+          )}
+
+          {addOnsLoading && (
+            <View style={styles.addOnsLoadingRow}>
+              <ActivityIndicator size="small" color={colors.primary} />
+              <Text style={styles.addOnsLoadingText}>Loading add-ons…</Text>
+            </View>
+          )}
+
+          {hasAddOns && (
+            <View style={styles.addOnsSection}>
+              <Text style={styles.sectionLabel}>Add-ons</Text>
+              <Text style={styles.addOnsHint}>Select any you'd like</Text>
+              <View style={styles.addOnsList}>
+                {addOns!.map((addOn, i) => {
+                  const active = selectedAddOns.some(a => a.id === addOn.id);
+                  return (
+                    <TouchableOpacity
+                      key={addOn.id}
+                      activeOpacity={0.75}
+                      onPress={() => toggleAddOn(addOn)}
+                      style={[styles.addOnRow, i > 0 && styles.addOnRowDivider]}
+                    >
+                      <Text style={styles.addOnName}>{addOn.name}</Text>
+                      <View style={styles.addOnRight}>
+                        <Text style={styles.addOnPrice}>{addOn.is_free ? 'Free' : `₹${addOn.price}`}</Text>
+                        <View style={[styles.checkbox, active && styles.checkboxActive]}>
+                          {active && <Text style={styles.checkboxTick}>✓</Text>}
+                        </View>
+                      </View>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            </View>
           )}
 
           <Text style={styles.sectionLabel}>Preferences</Text>
@@ -143,6 +192,40 @@ const styles = StyleSheet.create({
   itemName: { fontSize: 17, fontWeight: '700', color: colors.text },
   subtitle: { fontSize: 13, color: colors.textMuted, marginTop: spacing.xs },
   sectionLabel: { fontSize: 12, fontWeight: '600', color: colors.textMuted, marginTop: spacing.md },
+  addOnsLoadingRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, marginTop: spacing.md },
+  addOnsLoadingText: { fontSize: 12, color: colors.textMuted },
+  addOnsSection: { marginTop: spacing.md },
+  addOnsHint: { fontSize: 11, color: colors.textMuted, marginTop: 2 },
+  addOnsList: {
+    marginTop: spacing.sm,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.md,
+    overflow: 'hidden',
+  },
+  addOnRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    backgroundColor: colors.surface,
+  },
+  addOnRowDivider: { borderTopWidth: 1, borderTopColor: colors.border },
+  addOnName: { fontSize: 14, color: colors.text, flex: 1, marginRight: spacing.sm },
+  addOnRight: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  addOnPrice: { fontSize: 13, color: colors.textMuted, fontWeight: '600' },
+  checkbox: {
+    width: 20,
+    height: 20,
+    borderRadius: 4,
+    borderWidth: 1.5,
+    borderColor: colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  checkboxActive: { backgroundColor: colors.accent, borderColor: colors.accent },
+  checkboxTick: { color: '#fff', fontSize: 12, fontWeight: '700', lineHeight: 14 },
   chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginTop: spacing.sm },
   chip: {
     paddingHorizontal: 14,

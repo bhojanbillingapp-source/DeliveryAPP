@@ -8,6 +8,7 @@ import { useCart } from '../context/CartContext';
 import { useOutlet } from '../context/OutletContext';
 import OrderTypeDropdown from '../components/OrderTypeDropdown';
 import type { AppStackParamList, MainTabParamList } from '../navigation/types';
+import { CART_BAR_CLEARANCE } from '../navigation/tabBarConfig';
 import { colors, radius, spacing } from '../theme';
 
 type Props = CompositeScreenProps<
@@ -33,7 +34,7 @@ export default function HomeScreen({ navigation }: Props) {
         <Text style={styles.heroSubtitle}>Browse the full menu and order in a few taps.</Text>
       </View>
 
-      <View style={styles.ctaRow}>
+      <View style={[styles.ctaRow, itemCount > 0 && { paddingBottom: CART_BAR_CLEARANCE }]}>
         <TouchableOpacity
           style={styles.viewMenuButton}
           onPress={() => navigation.navigate('Categories')}

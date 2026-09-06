@@ -48,7 +48,13 @@ export default function MapPickerScreen({ navigation, route }: Props) {
 
   const [coords, setCoords] = useState(initial ?? DEFAULT_COORDS);
   const [locating, setLocating] = useState(!initial);
-  const htmlRef = useRef(initial ? buildMapHtml(initial.latitude, initial.longitude, PICKED_ZOOM) : null);
+  const htmlRef = useRef(
+    buildMapHtml(
+      initial?.latitude ?? DEFAULT_COORDS.latitude,
+      initial?.longitude ?? DEFAULT_COORDS.longitude,
+      initial ? PICKED_ZOOM : DEFAULT_ZOOM
+    )
+  );
 
   useEffect(() => {
     if (initial) return;
@@ -101,7 +107,7 @@ export default function MapPickerScreen({ navigation, route }: Props) {
     <View style={styles.container}>
       <ScreenHeader title="Pick your location" onBack={() => navigation.goBack()} />
       <View style={styles.mapWrap}>
-        {locating || !htmlRef.current ? (
+        {locating ? (
           <View style={styles.loadingWrap}>
             <ActivityIndicator color={colors.primary} />
             <Text style={styles.hint}>Finding your location…</Text>

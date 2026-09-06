@@ -4,11 +4,11 @@ export type MainTabParamList = {
   Home: undefined;
   MyOrders: undefined;
   More: undefined;
+  Categories: undefined;
 };
 
 export type AppStackParamList = {
   MainTabs: NavigatorScreenParams<MainTabParamList> | undefined;
-  Categories: undefined;
   CategoryItems: { title: string; items: import('../types').MenuItem[] };
   Cart: { selectedAddressId?: number } | undefined;
   OrderDetail: { orderId: number };
@@ -19,6 +19,7 @@ export type AppStackParamList = {
   } | undefined;
   MapPicker: { initialCoords?: { latitude: number; longitude: number } } | undefined;
   TrackOrder: { orderId: number };
+  DeliveryChat: { orderId: number };
   Profile: undefined;
   Login: undefined;
   Signup: undefined;

@@ -15,6 +15,22 @@ const STATUS_LABELS: Record<string, string> = {
   CANCELLED: 'Cancelled',
 };
 
+const PREPARING_ITEM_STATUSES = ['PREPARING', 'ASSIGNED'];
+const READY_ITEM_STATUSES = ['READY', 'SERVED'];
+
+function getOrderStatusText(order: OrderSummary, items: OrderItem[]): string {
+  if (order.status !== 'OPEN') {
+    return STATUS_LABELS[order.status] || order.status;
+  }
+  if (items.some(i => READY_ITEM_STATUSES.includes(i.status))) {
+    return 'Order ready';
+  }
+  if (items.some(i => PREPARING_ITEM_STATUSES.includes(i.status))) {
+    return 'Preparation started';
+  }
+  return STATUS_LABELS.OPEN;
+}
+
 export default function OrderDetailScreen({ navigation, route }: Props) {
   const { orderId } = route.params;
   const [order, setOrder] = useState<OrderSummary | null>(null);
@@ -61,7 +77,7 @@ export default function OrderDetailScreen({ navigation, route }: Props) {
                   </Text>
                 </View>
               </View>
-              <Text style={styles.statusText}>{STATUS_LABELS[order.status] || order.status}</Text>
+              <Text style={styles.statusText}>{getOrderStatusText(order, items)}</Text>
               <Text style={styles.meta}>Payment: {order.payment_method} · {order.payment_status}</Text>
               <Text style={styles.meta}>Placed {new Date(order.created_at).toLocaleString()}</Text>
               {order.status === 'OPEN' && (
@@ -77,7 +93,12 @@ export default function OrderDetailScreen({ navigation, route }: Props) {
           }
           renderItem={({ item }) => (
             <View style={styles.row}>
-              <Text style={styles.itemName}>{item.item_name} × {item.quantity}</Text>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.itemName}>{item.item_name} × {item.quantity}</Text>
+                {!!item.add_ons?.length && (
+                  <Text style={styles.itemAddOns}>+ {item.add_ons.map(a => a.name).join(', ')}</Text>
+                )}
+              </View>
               <Text style={styles.itemStatus}>{item.status}</Text>
             </View>
           )}
@@ -124,6 +145,7 @@ const styles = StyleSheet.create({
     marginBottom: spacing.xs,
   },
   itemName: { fontSize: 15, color: colors.text },
+  itemAddOns: { fontSize: 12, color: colors.textMuted, marginTop: 2 },
   itemStatus: { fontSize: 13, color: colors.textMuted },
   totalRow: { flexDirection: 'row', justifyContent: 'space-between', marginTop: spacing.md, paddingHorizontal: spacing.xs },
   totalLabel: { fontSize: 16, fontWeight: '600', color: colors.text },

@@ -5,8 +5,10 @@ import type { CompositeScreenProps } from '@react-navigation/native';
 import type { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
 import api from '../api/client';
 import { useAuth } from '../context/AuthContext';
+import { useCart } from '../context/CartContext';
 import ScreenHeader from '../components/ScreenHeader';
 import type { AppStackParamList, MainTabParamList } from '../navigation/types';
+import { CART_BAR_CLEARANCE } from '../navigation/tabBarConfig';
 import type { OrderSummary } from '../types';
 import { colors, radius, spacing, statusColors } from '../theme';
 
@@ -17,6 +19,7 @@ type Props = CompositeScreenProps<
 
 export default function OrdersScreen({ navigation }: Props) {
   const { customer } = useAuth();
+  const { itemCount } = useCart();
   const [orders, setOrders] = useState<OrderSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -63,7 +66,7 @@ export default function OrdersScreen({ navigation }: Props) {
           data={orders}
           keyExtractor={o => String(o.order_id)}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} />}
-          contentContainerStyle={{ padding: spacing.md }}
+          contentContainerStyle={{ padding: spacing.md, paddingBottom: itemCount > 0 ? CART_BAR_CLEARANCE : spacing.md }}
           renderItem={({ item }) => {
             const status = statusColors[item.status] || { bg: '#EEE', fg: colors.textMuted };
             return (
