@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The backend (see .env API_HOST) is served over plain http://, so release
+  builds must be told to permit cleartext traffic. AGP force-injects
+  usesCleartextTraffic="false" into the release manifest, which this config
+  overrides (a network security config takes precedence on API 24+).
+  Remove this file and the networkSecurityConfig attribute once the API is
+  behind https://.
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+</network-security-config>
