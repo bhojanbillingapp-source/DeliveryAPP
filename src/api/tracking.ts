@@ -25,8 +25,6 @@ export type TrackingInfo = {
   lastRecordedAt: string | null;
   delivery_boy_name: string | null;
   delivery_boy_phone: string | null;
-  partnerFirstName: string | null;
-  partnerPhoneMasked: string | null;
   history: TrackingHistoryEntry[];
 };
 
@@ -65,8 +63,6 @@ export async function trackOrder(orderId: number, since?: string | null): Promis
     lastRecordedAt: data.last_recorded_at ?? null,
     delivery_boy_name: data.delivery_boy_name ?? null,
     delivery_boy_phone: data.delivery_boy_phone ?? null,
-    partnerFirstName: data.delivery_partner_first_name ?? null,
-    partnerPhoneMasked: data.delivery_partner_phone_masked ?? null,
     history: data.history || [],
   };
 }

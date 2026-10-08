@@ -89,6 +89,16 @@ android {
     buildToolsVersion rootProject.ext.buildToolsVersion
     compileSdk rootProject.ext.compileSdkVersion
 
+    // Pinned to a newer CMake package (vs. the AGP-default 3.22.1) because its
+    // bundled ninja.exe respects Windows LongPathsEnabled; 3.22.1's ninja does
+    // not, which fails autolinked codegen builds (e.g. react-native-gesture-handler)
+    // whose generated object paths exceed the 260-char Windows MAX_PATH.
+    externalNativeBuild {
+        cmake {
+            version "4.1.2"
+        }
+    }
+
     namespace "com.customerapp"
     defaultConfig {
         applicationId "com.customerapp"
