@@ -39,4 +39,11 @@ export type AppStackParamList = {
   // Phase 2 — the confirmed booking and its statutory documents.
   PartyBooking: { bookingId: string };
   PartyDocument: { documentId: string };
+  /**
+   * Group K (FR-PO-170..179). Its own route rather than a modal on the
+   * booking, because FR-PO-173 requires the refund computation to be shown
+   * before the cancellation is agreed — and because a customer comes back to
+   * it afterwards to see where the money is.
+   */
+  PartyCancel: { bookingId: string };
 };

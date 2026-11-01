@@ -886,3 +886,359 @@ export function bookingNextStep(b: PartyBooking): {
   }
   return null;
 }
+
+/* ================================================================== */
+/* GROUP K — cancelling, changing, and tracking a refund               */
+/*                                                                     */
+/* The customer half of FR-PO-166..179. The refund statuses below are   */
+/* the SAME values the restaurant's staff see, because they come from   */
+/* one status column on one row (FR-PO-178) — there is no customer      */
+/* copy to drift out of step.                                          */
+/* ================================================================== */
+
+export type RefundStatus =
+  | 'REQUESTED' | 'APPROVED' | 'REJECTED'
+  | 'PROCESSING' | 'COMPLETED' | 'FAILED';
+
+export type ChangeStatus =
+  | 'DRAFT' | 'PENDING_APPROVAL' | 'AWAITING_CUSTOMER'
+  | 'APPLIED' | 'REJECTED' | 'WITHDRAWN';
+
+/**
+ * One refund band, as the customer is shown it.
+ *
+ * The whole table is shown beside the figure on purpose: "why am I only
+ * getting half back?" is answered by seeing that a week earlier would have
+ * returned all of it.
+ */
+export interface RefundBand {
+  min_days_before: number;
+  max_days_before: number | null;
+  refund_pct: number;
+  label: string | null;
+}
+
+/**
+ * What cancelling would cost, computed and explained BEFORE anything is
+ * agreed (FR-PO-173).
+ *
+ * `explanation` is written by the server, so this screen and the
+ * restaurant's screen say the same thing about the same arithmetic.
+ */
+export interface CancellationPreview {
+  booking_no: string;
+  event_date: string;
+  order_value: number;
+  days_to_event: number;
+  amount_paid: number;
+  policy_refund_pct: number;
+  band: {
+    min_days_before?: number;
+    max_days_before?: number | null;
+    refund_pct: number;
+    label: string | null;
+  };
+  computed_refund: number;
+  forfeited_amount: number;
+  deposit_refund: number;
+  total_returned: number;
+  expected_completion_date: string;
+  basis: string;
+  explanation: string;
+  policy_text: string | null;
+  bands: RefundBand[];
+  partial_cancellation_available: boolean;
+  /** BRD 4.3: reducing below this saves nothing, so the screen says so. */
+  guaranteed_guest_count: number;
+  quoted_guest_count: number;
+  final_guest_count: number | null;
+  already_requested: boolean;
+  /** FR-PO-171: the reasons the restaurant actually offers, not a hard-coded list. */
+  reasons: { code: string; label: string }[];
+}
+
+/**
+ * FR-PO-173 — see the figure before committing to anything. Writes nothing.
+ */
+export const previewPartyCancellation = (
+  bookingId: string,
+  cancelledValue?: number,
+) => unwrap<CancellationPreview>(
+  api.get(`${BASE}/bookings/${bookingId}/cancellation-preview`, {
+    params: cancelledValue ? { cancelled_value: cancelledValue } : undefined,
+  }),
+);
+
+export interface CancellationRequestResult {
+  cancellation_id: string;
+  cancellation_no: string;
+  status: 'REQUESTED' | 'CONFIRMED' | 'REJECTED' | 'WITHDRAWN';
+  status_label: string;
+  computed_refund: number;
+  forfeited_amount: number;
+  deposit_refund: number;
+  days_to_event: number;
+  explanation: string;
+  expected_completion_date: string;
+}
+
+/**
+ * FR-PO-170 — ask to cancel.
+ *
+ * This records a REQUEST. The restaurant confirms it, which is what releases
+ * the date and raises the refund — a customer cannot confirm their own
+ * cancellation, because confirming moves money.
+ */
+export async function requestPartyCancellation(
+  bookingId: string,
+  payload: {
+    reason_code: string;
+    reason_note?: string;
+    /** FR-PO-181: reduce the booking instead of abandoning the event. */
+    cancelled_scope?: {
+      cancelled_value: number;
+      guest_count_from?: number;
+      guest_count_to?: number;
+    };
+  },
+) {
+  try {
+    const { data } = await api.post(
+      `${BASE}/bookings/${bookingId}/cancellation`,
+      payload,
+    );
+    return {
+      cancellation: data.data as CancellationRequestResult,
+      message: data.message as string,
+    };
+  } catch (err) {
+    throw toPartyError(err);
+  }
+}
+
+/** Changed their mind before the restaurant actioned it. */
+export const withdrawPartyCancellation = (cancellationId: string) =>
+  unwrap<{ status: string; status_label: string }>(
+    api.post(`${BASE}/cancellations/${cancellationId}/withdraw`),
+  );
+
+/* ---------------- Refund status (FR-PO-178/179) ---------------- */
+
+export interface RefundStep {
+  status: RefundStatus;
+  status_label: string;
+  note: string;
+  at: string;
+}
+
+export interface PartyRefund {
+  refund_id: string;
+  amount: number;
+  /** The identical status the restaurant reads (FR-PO-178). */
+  status: RefundStatus;
+  status_label: string;
+  customer_note: string | null;
+  /** Already in plain words by the time it arrives here. */
+  channel: string;
+  requested_at: string;
+  approved_at: string | null;
+  initiated_at: string | null;
+  completed_at: string | null;
+  expected_completion_date: string | null;
+  refund_voucher_no: string | null;
+  /**
+   * FR-PO-179. The BRD calls refund status "the one the customer checks most
+   * often and the one most likely to generate a call" — so the app shows when
+   * each step happened and when the money is expected, not one word.
+   */
+  timeline: RefundStep[];
+}
+
+export const getPartyRefunds = (bookingId: string) =>
+  unwrap<PartyRefund[]>(api.get(`${BASE}/bookings/${bookingId}/refunds`));
+
+/* ---------------- Changing a booking (FR-PO-166..169) ---------------- */
+
+export interface ChangeEvaluation {
+  changes: {
+    field: string;
+    label: string;
+    from: string | number | null;
+    to: string | number | null;
+    note?: string;
+  }[];
+  permitted: boolean;
+  requires_approval: boolean;
+  /** Why it cannot be done, in words — never a bare refusal. */
+  reasons: string[];
+  previous_order_value: number;
+  revised_order_value: number;
+  value_delta: number;
+  amount_paid: number;
+  further_amount_due: number;
+  credit_due: number;
+  customer_confirm_required: boolean;
+  /** BRD 4.3: below the guarantee nothing is saved, so say so up front. */
+  reduction_below_guarantee: boolean;
+  guaranteed_guest_count: number;
+  summary: string;
+}
+
+/**
+ * FR-PO-166/168 — what a change would cost and whether it can be made, before
+ * asking for it. Writes nothing.
+ */
+export const evaluatePartyChange = (
+  bookingId: string,
+  patch: { guest_count?: number; event_date?: string; event_start_time?: string },
+) => unwrap<ChangeEvaluation>(
+  api.post(`${BASE}/bookings/${bookingId}/changes/evaluate`, patch),
+);
+
+export interface PartyChange {
+  amendment_id: string;
+  amendment_no: number;
+  change_type: string;
+  status: ChangeStatus;
+  status_label: string;
+  changes: ChangeEvaluation['changes'];
+  previous_order_value: number;
+  revised_order_value: number;
+  value_delta: number;
+  requested_at: string;
+  rejection_reason: string | null;
+  /** Whether the restaurant is waiting on the customer (FR-PO-169). */
+  awaiting_me: boolean;
+  customer_confirmed_at: string | null;
+}
+
+export async function requestPartyChange(
+  bookingId: string,
+  payload: {
+    guest_count?: number;
+    event_date?: string;
+    event_start_time?: string;
+    reason?: string;
+  },
+) {
+  try {
+    const { data } = await api.post(`${BASE}/bookings/${bookingId}/changes`, payload);
+    return {
+      change: data.data as PartyChange & { summary: string },
+      message: data.message as string,
+    };
+  } catch (err) {
+    throw toPartyError(err);
+  }
+}
+
+export const getPartyChanges = (bookingId: string) =>
+  unwrap<PartyChange[]>(api.get(`${BASE}/bookings/${bookingId}/changes`));
+
+/** FR-PO-169 — agree to the revised terms, which is what lets them bind. */
+export const confirmPartyChange = (amendmentId: string) =>
+  unwrap<{ status: string; status_label: string }>(
+    api.post(`${BASE}/changes/${amendmentId}/confirm`),
+  );
+
+/* ---------------- Display helpers ---------------- */
+
+/**
+ * How a refund reads to the person waiting for it.
+ *
+ * The tone matters more here than on the staff side: a customer seeing
+ * "Failed" needs to know somebody is dealing with it, not just that it went
+ * wrong.
+ */
+export function refundReassurance(r: PartyRefund): {
+  title: string;
+  body: string;
+  tone: 'pending' | 'moving' | 'done' | 'problem';
+} {
+  switch (r.status) {
+    case 'REQUESTED':
+      return {
+        title: 'We have your refund request',
+        body: 'The restaurant is reviewing it. You will see it move here as it progresses.',
+        tone: 'pending',
+      };
+    case 'APPROVED':
+      return {
+        title: 'Your refund is approved',
+        body: r.expected_completion_date
+          ? `It will be sent to ${r.channel.toLowerCase()} and should reach you by `
+            + `${r.expected_completion_date}.`
+          : `It will be sent to ${r.channel.toLowerCase()}.`,
+        tone: 'moving',
+      };
+    case 'PROCESSING':
+      return {
+        title: 'Your refund is on its way',
+        body: r.expected_completion_date
+          ? `It has been sent and should reach you by ${r.expected_completion_date}. `
+            + 'Banks can take a few working days to show it.'
+          : 'It has been sent. Banks can take a few working days to show it.',
+        tone: 'moving',
+      };
+    case 'COMPLETED':
+      return {
+        title: 'Your refund is complete',
+        body: r.refund_voucher_no
+          ? `Refund voucher ${r.refund_voucher_no} is available with your documents.`
+          : 'The money has been returned.',
+        tone: 'done',
+      };
+    case 'FAILED':
+      return {
+        title: 'Your refund could not be completed',
+        body: 'The restaurant has been told and is sorting it out. You do not need '
+          + 'to do anything — it will be tried again.',
+        tone: 'problem',
+      };
+    case 'REJECTED':
+    default:
+      return {
+        title: 'Your refund request was not approved',
+        body: 'Please contact the restaurant if you would like to discuss it.',
+        tone: 'problem',
+      };
+  }
+}
+
+/**
+ * Whether the customer still has something to do about a change they asked
+ * for. Returned rather than rendered so the booking screen and any list say
+ * the same thing.
+ */
+export function changeNextStep(c: PartyChange): {
+  title: string; body: string; action: 'CONFIRM' | null;
+} | null {
+  if (c.awaiting_me) {
+    return {
+      title: 'Confirm the revised terms',
+      body: c.value_delta > 0
+        ? `The change adds ${formatMoney(c.value_delta, 2)} to your booking. `
+          + 'It takes effect once you confirm.'
+        : c.value_delta < 0
+          ? `The change reduces your booking by ${formatMoney(Math.abs(c.value_delta), 2)}. `
+            + 'It takes effect once you confirm.'
+          : 'The change takes effect once you confirm.',
+      action: 'CONFIRM',
+    };
+  }
+  if (c.status === 'PENDING_APPROVAL') {
+    return {
+      title: 'The restaurant is reviewing your change',
+      body: 'A change this close to the event needs their approval.',
+      action: null,
+    };
+  }
+  if (c.status === 'REJECTED' && c.rejection_reason) {
+    return {
+      title: 'Your change could not be made',
+      body: c.rejection_reason,
+      action: null,
+    };
+  }
+  return null;
+}

@@ -27,6 +27,15 @@ import {
   type PartyBooking,
   bookingNextStep, confirmPartyFinalCount, fetchPartyBooking,
   formatMoney, requestPartyPaymentLink, timeLeft,
+  // Group K (FR-PO-170..179): asking to cancel or change, and seeing where a
+  // refund has got to.
+  type PartyChange,
+  type PartyRefund,
+  changeNextStep,
+  confirmPartyChange,
+  getPartyChanges,
+  getPartyRefunds,
+  refundReassurance,
 } from '../api/party';
 
 type Props = NativeStackScreenProps<AppStackParamList, 'PartyBooking'>;
@@ -43,10 +52,23 @@ export default function PartyBookingScreen({ navigation, route }: Props) {
   const [showCount, setShowCount] = useState(false);
   const [countDraft, setCountDraft] = useState('');
 
+  /* Group K. Loaded with the booking rather than on a tab, because a change
+     awaiting the customer's confirmation and a refund in flight are both
+     things they need to see without going looking. */
+  const [changes, setChanges] = useState<PartyChange[]>([]);
+  const [refunds, setRefunds] = useState<PartyRefund[]>([]);
+
   const load = useCallback(async () => {
     setError(null);
     try {
-      setBooking(await fetchPartyBooking(bookingId));
+      const [b, c, r] = await Promise.all([
+        fetchPartyBooking(bookingId),
+        getPartyChanges(bookingId).catch(() => []),
+        getPartyRefunds(bookingId).catch(() => []),
+      ]);
+      setBooking(b);
+      setChanges(c);
+      setRefunds(r);
     } catch (err: any) {
       setError(err.message || 'Could not load your booking');
     } finally {
@@ -426,6 +448,75 @@ export default function PartyBookingScreen({ navigation, route }: Props) {
           })}
         </View>
 
+        {/* ---------------- group K: a change awaiting me (FR-PO-169) ------ */}
+        {changes.filter((c) => c.status !== 'WITHDRAWN').map((c) => {
+          const step = changeNextStep(c);
+          if (!step) return null;
+          return (
+            <View
+              key={c.amendment_id}
+              style={[styles.card, step.action ? styles.cardAction : null]}
+            >
+              <Text style={styles.cardTitle}>{step.title}</Text>
+              <Text style={styles.cardHint}>{step.body}</Text>
+
+              {c.changes.map((ch, i) => (
+                <Text key={`${c.amendment_id}-${ch.field}-${i}`} style={styles.changeLine}>
+                  {`${ch.label}: ${ch.from ?? '\u2014'} \u2192 ${ch.to ?? '\u2014'}`}
+                </Text>
+              ))}
+
+              {step.action === 'CONFIRM' ? (
+                <TouchableOpacity
+                  style={[styles.ctaBtn, busy && styles.btnOff]}
+                  disabled={busy}
+                  onPress={async () => {
+                    setBusy(true);
+                    try {
+                      await confirmPartyChange(c.amendment_id);
+                      await load();
+                      Alert.alert(
+                        'Thank you',
+                        'The restaurant will now apply the change.',
+                      );
+                    } catch (err: any) {
+                      Alert.alert('Could not confirm that', err.message);
+                    } finally {
+                      setBusy(false);
+                    }
+                  }}
+                >
+                  <Text style={styles.ctaBtnText}>Confirm the revised terms</Text>
+                </TouchableOpacity>
+              ) : null}
+            </View>
+          );
+        })}
+
+        {/* ---------------- group K: a refund in flight (FR-PO-178/179) ---- */}
+        {refunds.length > 0 ? (
+          <TouchableOpacity
+            style={styles.card}
+            activeOpacity={0.85}
+            onPress={() => navigation.navigate('PartyCancel', { bookingId })}
+          >
+            <Text style={styles.cardTitle}>Your refund</Text>
+            {refunds.map((r) => {
+              const says = refundReassurance(r);
+              return (
+                <View key={r.refund_id} style={styles.refundRow}>
+                  <Text style={styles.refundAmount}>{formatMoney(r.amount, 2)}</Text>
+                  <View style={styles.refundBody}>
+                    <Text style={styles.refundTitle}>{says.title}</Text>
+                    <Text style={styles.refundNote}>{says.body}</Text>
+                  </View>
+                </View>
+              );
+            })}
+            <Text style={styles.cardHint}>Tap to see every step and when it is expected.</Text>
+          </TouchableOpacity>
+        ) : null}
+
         {/* ---------------- terms ---------------- */}
         {booking.terms_text || booking.cancellation_policy_text ? (
           <View style={styles.card}>
@@ -443,6 +534,22 @@ export default function PartyBookingScreen({ navigation, route }: Props) {
               These are the terms as they stood when you accepted, kept with your booking.
             </Text>
           </View>
+        ) : null}
+
+        {/* ---------------- group K: the way out (FR-PO-170/173) ---------- */}
+        {!['COMPLETED', 'CANCELLED'].includes(booking.booking_status) ? (
+          <TouchableOpacity
+            style={styles.cancelLink}
+            activeOpacity={0.8}
+            onPress={() => navigation.navigate('PartyCancel', { bookingId })}
+          >
+            <Text style={styles.cancelLinkText}>
+              {refunds.length ? 'Cancellation and refund' : 'I need to cancel this booking'}
+            </Text>
+            <Text style={styles.cancelLinkHint}>
+              We will show you exactly what comes back before you decide.
+            </Text>
+          </TouchableOpacity>
         ) : null}
       </ScrollView>
 
@@ -509,94 +616,130 @@ function Row({ label, value }: { label: string; value: string }) {
 }
 
 const styles = StyleSheet.create({
+  /* group K: a change awaiting confirmation, a refund in flight, and the
+     way out of the booking */
+  cardAction: { borderColor: colors.accent, backgroundColor: '#FFF8F2' },
+  changeLine: {
+    fontSize: 13, fontWeight: '500', lineHeight: 19,
+    color: colors.text, includeFontPadding: false, marginTop: spacing.xs,
+  },
+  refundRow: {
+    flexDirection: 'row', gap: spacing.sm, marginTop: spacing.sm,
+  },
+  refundAmount: {
+    fontSize: 16, fontWeight: '700', lineHeight: 22,
+    color: colors.text, includeFontPadding: false, minWidth: 90,
+  },
+  refundBody: { flex: 1 },
+  refundTitle: {
+    fontSize: 13.5, fontWeight: '600', lineHeight: 19,
+    color: colors.text, includeFontPadding: false,
+  },
+  refundNote: {
+    fontSize: 12.5, fontWeight: '400', lineHeight: 18,
+    color: colors.textMuted, includeFontPadding: false,
+  },
+  cancelLink: {
+    paddingVertical: spacing.md, paddingHorizontal: spacing.md,
+    borderRadius: radius.md, borderWidth: 1, borderColor: colors.border,
+    backgroundColor: colors.surface,
+  },
+  cancelLinkText: {
+    fontSize: 14.5, fontWeight: '600', lineHeight: 20,
+    color: colors.danger, includeFontPadding: false,
+  },
+  cancelLinkHint: {
+    fontSize: 12.5, fontWeight: '400', lineHeight: 18,
+    color: colors.textMuted, includeFontPadding: false, marginTop: 2,
+  },
   container: { flex: 1, backgroundColor: colors.background },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: spacing.lg },
   scroll: { padding: spacing.md, gap: spacing.md, paddingBottom: spacing.xl },
-  errorText: { fontSize: 14, color: colors.danger, textAlign: 'center' },
+  errorText: { fontSize: 14, color: colors.danger, textAlign: 'center', includeFontPadding: false },
 
   statusCard: {
     backgroundColor: colors.primary, borderRadius: radius.lg, padding: spacing.md, gap: 3,
   },
-  statusLabel: { fontSize: 18, fontWeight: '800', color: colors.surface },
-  statusHint: { fontSize: 12.5, color: colors.surface, opacity: 0.9, lineHeight: 18 },
+  statusLabel: { fontSize: 18, fontWeight: '800', color: colors.surface, includeFontPadding: false },
+  statusHint: { fontSize: 12.5, color: colors.surface, opacity: 0.9, lineHeight: 18, includeFontPadding: false },
 
   ctaCard: {
     backgroundColor: colors.accent, borderRadius: radius.lg, padding: spacing.md, gap: 6,
   },
-  ctaTitle: { fontSize: 16, fontWeight: '800', color: colors.text },
-  ctaBody: { fontSize: 13.5, color: colors.text, lineHeight: 19 },
+  ctaTitle: { fontSize: 16, fontWeight: '800', color: colors.text, includeFontPadding: false },
+  ctaBody: { fontSize: 13.5, color: colors.text, lineHeight: 19, includeFontPadding: false },
   ctaRow: { flexDirection: 'row', gap: spacing.sm, flexWrap: 'wrap' },
   ctaBtn: {
     flex: 1, minWidth: 140, backgroundColor: colors.primary, borderRadius: radius.pill,
     paddingVertical: 13, alignItems: 'center', justifyContent: 'center',
   },
-  ctaBtnText: { fontSize: 14.5, fontWeight: '700', color: colors.surface },
+  ctaBtnText: { fontSize: 14.5, fontWeight: '700', color: colors.surface, includeFontPadding: false },
   ctaOutlineBtn: {
     flex: 1, minWidth: 140, borderWidth: 1.5, borderColor: colors.primary,
     borderRadius: radius.pill, paddingVertical: 13, alignItems: 'center',
   },
-  ctaOutlineBtnText: { fontSize: 13.5, fontWeight: '700', color: colors.primary },
+  ctaOutlineBtnText: { fontSize: 13.5, fontWeight: '700', color: colors.primary, includeFontPadding: false },
   btnOff: { opacity: 0.6 },
 
   card: {
     backgroundColor: colors.surface, borderRadius: radius.lg,
     borderWidth: 1, borderColor: colors.border, padding: spacing.md, gap: 9,
   },
-  cardTitle: { fontSize: 15.5, fontWeight: '700', color: colors.text },
-  cardHint: { fontSize: 12, color: colors.textMuted, lineHeight: 17 },
+  cardTitle: { fontSize: 15.5, fontWeight: '700', color: colors.text, includeFontPadding: false },
+  cardHint: { fontSize: 12, color: colors.textMuted, lineHeight: 17, includeFontPadding: false },
 
   countGrid: { flexDirection: 'row', gap: spacing.sm },
   countCell: { flex: 1, alignItems: 'center', gap: 1 },
-  countLabel: { fontSize: 11, fontWeight: '600', color: colors.textMuted },
-  countValue: { fontSize: 24, fontWeight: '800', color: colors.text },
+  countLabel: { fontSize: 11, fontWeight: '600', color: colors.textMuted, includeFontPadding: false },
+  countValue: { fontSize: 24, fontWeight: '800', color: colors.text, includeFontPadding: false },
   guaranteeBox: {
     backgroundColor: colors.iconBg, borderRadius: radius.sm, padding: spacing.sm,
   },
-  guaranteeText: { fontSize: 12.5, fontWeight: '600', color: colors.text, lineHeight: 18 },
+  guaranteeText: { fontSize: 12.5, fontWeight: '600', color: colors.text, lineHeight: 18, includeFontPadding: false },
 
   row: { gap: 1 },
-  rowLabel: { fontSize: 11, fontWeight: '700', color: colors.textMuted, textTransform: 'uppercase' },
-  rowValue: { fontSize: 14, color: colors.text, lineHeight: 20 },
+  rowLabel: { fontSize: 11, fontWeight: '700', color: colors.textMuted, textTransform: 'uppercase', includeFontPadding: false },
+  rowValue: { fontSize: 14, color: colors.text, lineHeight: 20, includeFontPadding: false },
 
   moneyRow: { flexDirection: 'row', gap: spacing.sm },
   moneyCell: { flex: 1, gap: 1 },
-  moneyLabel: { fontSize: 11, fontWeight: '600', color: colors.textMuted },
-  moneyValue: { fontSize: 16, fontWeight: '700', color: colors.text },
-  moneyValuePaid: { fontSize: 16, fontWeight: '700', color: statusColors.CLOSED.fg },
+  moneyLabel: { fontSize: 11, fontWeight: '600', color: colors.textMuted, includeFontPadding: false },
+  moneyValue: { fontSize: 16, fontWeight: '700', color: colors.text, includeFontPadding: false },
+  moneyValuePaid: { fontSize: 16, fontWeight: '700', color: statusColors.CLOSED.fg, includeFontPadding: false },
 
   msRow: {
     flexDirection: 'row', alignItems: 'center', gap: spacing.sm,
     borderTopWidth: 1, borderTopColor: colors.border, paddingTop: 9,
   },
   msMain: { flex: 1, gap: 1 },
-  msName: { fontSize: 13.5, fontWeight: '600', color: colors.text },
-  msMeta: { fontSize: 11.5, color: colors.textMuted },
+  msName: { fontSize: 13.5, fontWeight: '600', color: colors.text, includeFontPadding: false },
+  msMeta: { fontSize: 11.5, color: colors.textMuted, includeFontPadding: false },
   msSide: { alignItems: 'flex-end', gap: 3 },
-  msAmount: { fontSize: 14, fontWeight: '700', color: colors.text },
+  msAmount: { fontSize: 14, fontWeight: '700', color: colors.text, includeFontPadding: false },
   msPill: { paddingHorizontal: 8, paddingVertical: 2, borderRadius: radius.pill },
-  msPillText: { fontSize: 10.5, fontWeight: '700' },
+  msPillText: { fontSize: 10.5, fontWeight: '700', includeFontPadding: false },
   msPayBtn: {
     backgroundColor: colors.accent, borderRadius: radius.pill,
     paddingHorizontal: 14, paddingVertical: 8,
   },
-  msPayBtnText: { fontSize: 12.5, fontWeight: '700', color: colors.surface },
+  msPayBtnText: { fontSize: 12.5, fontWeight: '700', color: colors.surface, includeFontPadding: false },
 
   depositBox: {
     backgroundColor: colors.iconBg, borderRadius: radius.md, padding: spacing.sm, gap: 3,
   },
-  depositTitle: { fontSize: 13, fontWeight: '700', color: colors.text },
-  depositBody: { fontSize: 12.5, color: colors.text },
-  depositNote: { fontSize: 11.5, color: colors.textMuted, lineHeight: 16 },
+  depositTitle: { fontSize: 13, fontWeight: '700', color: colors.text, includeFontPadding: false },
+  depositBody: { fontSize: 12.5, color: colors.text, includeFontPadding: false },
+  depositNote: { fontSize: 11.5, color: colors.textMuted, lineHeight: 16, includeFontPadding: false },
 
   docRow: {
     flexDirection: 'row', alignItems: 'center', gap: spacing.sm,
     borderTopWidth: 1, borderTopColor: colors.border, paddingTop: 9,
   },
   docMain: { flex: 1, gap: 1 },
-  docLabel: { fontSize: 13.5, fontWeight: '600', color: colors.text },
-  docMeta: { fontSize: 11.5, color: colors.textMuted },
-  docValue: { fontSize: 13.5, fontWeight: '700', color: colors.text },
-  docArrow: { fontSize: 20, color: colors.textMuted },
+  docLabel: { fontSize: 13.5, fontWeight: '600', color: colors.text, includeFontPadding: false },
+  docMeta: { fontSize: 11.5, color: colors.textMuted, includeFontPadding: false },
+  docValue: { fontSize: 13.5, fontWeight: '700', color: colors.text, includeFontPadding: false },
+  docArrow: { fontSize: 20, color: colors.textMuted, includeFontPadding: false },
 
   tlRow: { flexDirection: 'row', gap: spacing.sm },
   tlRail: { width: 14, alignItems: 'center' },
@@ -604,18 +747,18 @@ const styles = StyleSheet.create({
   tlDotLast: { width: 12, height: 12, borderRadius: 6, backgroundColor: colors.accent },
   tlLine: { flex: 1, width: 2, backgroundColor: colors.border, marginVertical: 2 },
   tlBody: { flex: 1, paddingBottom: 13, gap: 1 },
-  tlLabel: { fontSize: 13.5, fontWeight: '600', color: colors.textMuted },
+  tlLabel: { fontSize: 13.5, fontWeight: '600', color: colors.textMuted, includeFontPadding: false },
   tlLabelLast: { color: colors.text, fontWeight: '700' },
-  tlWhen: { fontSize: 11.5, color: colors.textMuted },
+  tlWhen: { fontSize: 11.5, color: colors.textMuted, includeFontPadding: false },
 
-  termsHeading: { fontSize: 13, fontWeight: '700', color: colors.text, marginTop: 3 },
-  termsBody: { fontSize: 12.5, color: colors.textMuted, lineHeight: 19 },
+  termsHeading: { fontSize: 13, fontWeight: '700', color: colors.text, marginTop: 3, includeFontPadding: false },
+  termsBody: { fontSize: 12.5, color: colors.textMuted, lineHeight: 19, includeFontPadding: false },
 
   outlineBtn: {
     borderWidth: 1, borderColor: colors.primary, borderRadius: radius.pill,
     paddingHorizontal: 18, paddingVertical: 12, alignItems: 'center', justifyContent: 'center',
   },
-  outlineBtnText: { fontSize: 13.5, fontWeight: '700', color: colors.primary },
+  outlineBtnText: { fontSize: 13.5, fontWeight: '700', color: colors.primary, includeFontPadding: false },
 
   backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'flex-end' },
   sheet: {
@@ -623,16 +766,17 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 20, borderTopRightRadius: 20,
     padding: spacing.md, gap: spacing.sm,
   },
-  sheetTitle: { fontSize: 17, fontWeight: '800', color: colors.text },
-  sheetBody: { fontSize: 13, color: colors.textMuted, lineHeight: 19 },
+  sheetTitle: { fontSize: 17, fontWeight: '800', color: colors.text, includeFontPadding: false },
+  sheetBody: { fontSize: 13, color: colors.textMuted, lineHeight: 19, includeFontPadding: false },
   sheetActions: { flexDirection: 'row', gap: spacing.sm, paddingTop: spacing.xs },
   input: {
     height: 48, borderWidth: 1, borderColor: colors.border, borderRadius: radius.sm,
     paddingHorizontal: 12, fontSize: 18, fontWeight: '700', color: colors.text,
     textAlign: 'center',
+    includeFontPadding: false,
   },
   warnBox: {
     backgroundColor: statusColors.OPEN.bg, borderRadius: radius.sm, padding: spacing.sm,
   },
-  warnText: { fontSize: 12.5, fontWeight: '600', color: statusColors.OPEN.fg, lineHeight: 18 },
+  warnText: { fontSize: 12.5, fontWeight: '600', color: statusColors.OPEN.fg, lineHeight: 18, includeFontPadding: false },
 });
