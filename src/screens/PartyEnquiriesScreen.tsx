@@ -108,7 +108,10 @@ export default function PartyEnquiriesScreen({ navigation }: Props) {
       <TouchableOpacity
         style={[styles.card, closed && styles.cardClosed]}
         activeOpacity={0.85}
-        onPress={() => navigation.navigate('PartyEnquiryDetail', { enquiryId: item.enquiry_id })}
+        onPress={() => (item.booking_id
+          // Once confirmed, the booking is what the customer came back for.
+          ? navigation.navigate('PartyBooking', { bookingId: item.booking_id })
+          : navigation.navigate('PartyEnquiryDetail', { enquiryId: item.enquiry_id }))}
       >
         <View style={styles.cardTop}>
           <View style={styles.cardTitleBlock}>
@@ -121,7 +124,11 @@ export default function PartyEnquiriesScreen({ navigation }: Props) {
             </Text>
           </View>
           <View style={[styles.pill, { backgroundColor: tone.bg }]}>
-            <Text style={[styles.pillText, { color: tone.fg }]}>{item.status_label}</Text>
+            <Text style={[styles.pillText, { color: tone.fg }]}>
+              {/* A confirmed booking has its own status, which is more useful
+                  than "Accepted, awaiting advance" once the advance is in. */}
+              {item.booking_status_label || item.status_label}
+            </Text>
           </View>
         </View>
 
@@ -147,6 +154,12 @@ export default function PartyEnquiriesScreen({ navigation }: Props) {
               {validity
                 ? `Your quotation is ready — ${validity} to respond`
                 : 'Your quotation is ready to review'}
+            </Text>
+          </View>
+        ) : item.booking_id && (item.booking_value ?? 0) > (item.amount_paid ?? 0) ? (
+          <View style={styles.actionStrip}>
+            <Text style={styles.actionStripText}>
+              {`${formatMoney((item.booking_value ?? 0) - (item.amount_paid ?? 0))} outstanding`}
             </Text>
           </View>
         ) : item.status === 'QUOTE_ACCEPTED' && item.min_advance_amount ? (

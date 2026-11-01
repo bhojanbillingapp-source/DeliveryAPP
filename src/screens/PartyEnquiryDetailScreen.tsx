@@ -195,7 +195,24 @@ export default function PartyEnquiryDetailScreen({ navigation, route }: Props) {
           </TouchableOpacity>
         ) : null}
 
-        {liveQuote && liveQuote.status === 'ACCEPTED' ? (
+        {/* Once an advance has confirmed it, the BOOKING is the thing to open —
+            it carries the payment position, the guest count and the receipts. */}
+        {enquiry.booking ? (
+          <TouchableOpacity
+            style={styles.ctaCard}
+            activeOpacity={0.85}
+            onPress={() => navigation.navigate('PartyBooking', {
+              bookingId: enquiry.booking!.booking_id,
+            })}
+          >
+            <Text style={styles.ctaTitle}>{enquiry.booking.booking_status_label}</Text>
+            <Text style={styles.ctaBody}>
+              {`Booking ${enquiry.booking.booking_no} · ${enquiry.booking.financial_status_label}. `}
+              Open it to pay, confirm your guest count and download your receipts.
+            </Text>
+            <Text style={styles.linkRowText}>Open my booking ›</Text>
+          </TouchableOpacity>
+        ) : liveQuote && liveQuote.status === 'ACCEPTED' ? (
           <View style={styles.acceptedCard}>
             <Text style={styles.ctaTitle}>Accepted — one step left</Text>
             <Text style={styles.ctaBody}>

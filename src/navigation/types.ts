@@ -36,4 +36,7 @@ export type AppStackParamList = {
   PartyEnquiries: undefined;
   PartyEnquiryDetail: { enquiryId: string };
   PartyQuotation: { quotationId: string };
+  // Phase 2 — the confirmed booking and its statutory documents.
+  PartyBooking: { bookingId: string };
+  PartyDocument: { documentId: string };
 };

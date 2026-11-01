@@ -242,11 +242,34 @@ export interface PartyQuotation extends PartyQuotationSummary {
   is_expired: boolean;
 }
 
+/**
+ * The booking an enquiry became, where one exists. Reported by the backend on
+ * both the list and the detail (Phase 2), so the app never has to guess at a
+ * booking id.
+ */
+export interface PartyBookingRef {
+  booking_id: string;
+  booking_no: string;
+  booking_status: BookingStatus;
+  booking_status_label: string;
+  financial_status: FinancialStatus;
+  financial_status_label: string;
+}
+
 export interface PartyEnquirySummary {
   enquiry_id: string;
   enquiry_no: string;
   status: PartyStatus;
   status_label: string;
+  /** Phase 2: set once an advance has confirmed the accepted quotation. */
+  booking_id?: string | null;
+  booking_no?: string | null;
+  booking_status?: BookingStatus | null;
+  booking_status_label?: string | null;
+  financial_status?: FinancialStatus | null;
+  financial_status_label?: string | null;
+  amount_paid?: number | null;
+  booking_value?: number | null;
   event_type: string | null;
   event_type_label: string | null;
   event_date: string | null;
@@ -295,6 +318,8 @@ export interface PartyEnquiryDetail extends PartyEnquirySummary {
   activity: PartyActivityEntry[];
   terms_text: string | null;
   cancellation_policy_text: string | null;
+  /** Phase 2: the booking this enquiry became, or null if not yet confirmed. */
+  booking: PartyBookingRef | null;
 }
 
 export interface PartyAvailability {
@@ -596,4 +621,268 @@ export function timeLeft(iso: string | null | undefined): string | null {
   const hours = Math.round(minutes / 60);
   if (hours < 48) return `${hours} hours left`;
   return `${Math.round(hours / 24)} days left`;
+}
+
+/* ================================================================== */
+/* PHASE 2 — the confirmed booking (BRD groups H, I, J)                */
+/* ================================================================== */
+
+export type BookingStatus =
+  | 'CONFIRMED' | 'AWAITING_FINAL_COUNT' | 'LOCKED_FOR_PRODUCTION'
+  | 'IN_PRODUCTION' | 'DISPATCHED' | 'IN_SERVICE' | 'COMPLETED' | 'CANCELLED';
+
+export type FinancialStatus =
+  | 'AWAITING_ADVANCE' | 'PART_PAID' | 'FULLY_PAID' | 'PAYMENT_OVERDUE'
+  | 'SETTLEMENT_PENDING' | 'SETTLED' | 'CANCELLATION_REQUESTED'
+  | 'REFUND_APPROVED' | 'REFUND_PROCESSING' | 'REFUND_COMPLETED'
+  | 'CANCELLED_WITH_FORFEITURE';
+
+export type PartyDocType =
+  | 'RECEIPT_VOUCHER' | 'TAX_INVOICE' | 'CREDIT_NOTE' | 'REFUND_VOUCHER';
+
+export interface PartyMilestone {
+  milestone_id: string;
+  sequence: number;
+  name: string;
+  amount: number;
+  paid_amount: number;
+  outstanding: number;
+  due_date: string | null;
+  due_label: string | null;
+  is_advance: boolean;
+  status: 'PENDING' | 'PARTIAL' | 'PAID' | 'OVERDUE' | 'WAIVED';
+  is_overdue: boolean;
+}
+
+export interface PartyPaymentRecord {
+  payment_id: string;
+  amount: number;
+  mode: string;
+  is_security_deposit: boolean;
+  collected_at: string;
+  receipt_document_id: string | null;
+  receipt_number: string | null;
+}
+
+export interface PartyLedgerEntry {
+  at: string;
+  kind: 'RECEIPT' | 'DEPOSIT';
+  description: string;
+  amount: number;
+  reference: string | null;
+  receipt_number: string | null;
+  running_balance_paid: number;
+  running_outstanding: number;
+}
+
+/**
+ * The paid and outstanding position.
+ *
+ * FR-PO-134 requires this to read IDENTICALLY here and in the restaurant's
+ * own system, so the backend serves both surfaces from one function.
+ */
+export interface PartyPaymentPosition {
+  booking_id: string;
+  booking_no: string;
+  order_value: number;
+  amount_paid: number;
+  amount_outstanding: number;
+  amount_refunded: number;
+  min_advance_amount: number;
+  financial_status: FinancialStatus;
+  financial_status_label: string;
+  deposit: {
+    required: number; paid: number; returned: number;
+    forfeited: number; outstanding: number;
+  };
+  milestones: PartyMilestone[];
+  next_due: {
+    milestone_id: string; name: string; amount: number;
+    due_date: string | null; due_label: string | null;
+  } | null;
+  ledger: PartyLedgerEntry[];
+  payments: PartyPaymentRecord[];
+  full_payment_offered?: boolean;
+}
+
+export interface PartyDocumentSummary {
+  document_id: string;
+  doc_type: PartyDocType;
+  doc_label: string;
+  doc_number: string;
+  total_value: number;
+  tax_amount?: number;
+  issued_at: string;
+}
+
+export interface PartyDocument extends PartyDocumentSummary {
+  taxable_value: number;
+  tax_rate: number;
+  advance_adjusted: number;
+  irn: string | null;
+  qr_code: string | null;
+  cancelled_at: string | null;
+  cancel_reason: string | null;
+  /** The document exactly as it was issued. */
+  content: Record<string, any>;
+}
+
+export interface PartyBooking {
+  booking_id: string;
+  booking_no: string;
+  enquiry_id: string;
+  enquiry_no: string;
+  quotation_no: string;
+  booking_status: BookingStatus;
+  booking_status_label: string;
+  financial_status: FinancialStatus;
+  financial_status_label: string;
+  confirmed_at: string;
+  event: {
+    type: string | null;
+    date: string;
+    start_time: string | null;
+    meal_period: MealPeriod | null;
+    service_mode: ServiceMode;
+    venue: string | null;
+    address: string | null;
+    setup_time: string | null;
+    serving_time: string | null;
+    clearance_time: string | null;
+  };
+  venue_contact: { name: string; mobile: string | null } | null;
+  /** FR-PO-121/122/123: what the customer is committed to, and by when. */
+  guests: {
+    quoted: number;
+    guaranteed: number;
+    guarantee_pct: number;
+    final: number | null;
+    final_count_deadline: string | null;
+    final_count_confirmed_at: string | null;
+    locked: boolean;
+    can_still_change: boolean;
+    note: string;
+  };
+  money: {
+    order_value: number;
+    amount_paid: number;
+    amount_outstanding: number;
+    late_increase_surcharge: number;
+  };
+  payment_position: PartyPaymentPosition;
+  /** FR-PO-116: the confirmation document as it was issued. */
+  confirmation: Record<string, any> | null;
+  documents: PartyDocumentSummary[];
+  timeline: PartyTimelineEntry[];
+  event_order_version: number | null;
+  cancellation_policy_text: string | null;
+  terms_text: string | null;
+}
+
+export const BOOKING_STATUS_HINT: Partial<Record<BookingStatus, string>> = {
+  CONFIRMED: 'Your date is committed. We will ask for your final guest count nearer the time.',
+  AWAITING_FINAL_COUNT: 'Please confirm your final guest count.',
+  LOCKED_FOR_PRODUCTION: 'Your guest count is locked and our kitchen is preparing.',
+  IN_PRODUCTION: 'Your order is being prepared.',
+  DISPATCHED: 'Your order has left the restaurant.',
+  IN_SERVICE: 'Your event is in progress.',
+  COMPLETED: 'Your event is complete.',
+};
+
+/* ---------------- Calls ---------------- */
+
+/** FR-PO-116: the booking confirmation and everything on it. */
+export const fetchPartyBooking = (bookingId: string) =>
+  unwrap<PartyBooking>(api.get(`${BASE}/bookings/${bookingId}`));
+
+/** FR-PO-134: the same paid and outstanding figures the restaurant sees. */
+export const fetchBookingPayments = (bookingId: string) =>
+  unwrap<PartyPaymentPosition>(api.get(`${BASE}/bookings/${bookingId}/payments`));
+
+/**
+ * FR-PO-135/136: ask for a payment link.
+ *
+ * Throws with code PARTY_GATEWAY_UNAVAILABLE where the restaurant has no
+ * payment gateway configured — in which case there is nothing to tap, and the
+ * customer should be told to contact their event contact.
+ */
+export async function requestPartyPaymentLink(bookingId: string, opts: {
+  milestone_id?: string; pay_full?: boolean;
+} = {}) {
+  try {
+    const { data } = await api.post(`${BASE}/bookings/${bookingId}/pay`, opts);
+    return data.data as {
+      link_id: string; amount: number; pay_url: string; expires_at: string;
+    };
+  } catch (err) {
+    throw toPartyError(err);
+  }
+}
+
+/**
+ * FR-PO-122: revise the guest count, until the deadline.
+ *
+ * Throws with code PARTY_HEADCOUNT_LOCKED once the deadline has passed — only
+ * the restaurant can approve an increase after that (FR-PO-124).
+ */
+export async function confirmPartyFinalCount(bookingId: string, count: number) {
+  try {
+    const { data } = await api.patch(`${BASE}/bookings/${bookingId}/final-count`, { count });
+    return {
+      guests: data.data as {
+        final_guest_count: number; guaranteed_guest_count: number;
+        billable_guest_count: number; order_value: number;
+      },
+      message: data.message as string,
+    };
+  } catch (err) {
+    throw toPartyError(err);
+  }
+}
+
+/** FR-PO-216: the receipts and invoice the customer may download. */
+export const fetchBookingDocuments = (bookingId: string) =>
+  unwrap<PartyDocumentSummary[]>(api.get(`${BASE}/bookings/${bookingId}/documents`));
+
+export const fetchPartyDocument = (documentId: string) =>
+  unwrap<PartyDocument>(api.get(`${BASE}/documents/${documentId}`));
+
+/** Open a payment link by its token. Public — the token is the authorisation. */
+export const openPartyPaymentLink = (token: string) =>
+  unwrap<{
+    booking_no: string; customer_name: string; milestone_name: string;
+    amount: number; expires_at: string; pay_url: string | null;
+  }>(api.get(`${BASE}/pay/${token}`));
+
+/* ---------------- Display helpers ---------------- */
+
+/**
+ * The one thing the customer needs to do, if anything. Returned rather than
+ * rendered so the list and the detail screen say the same thing.
+ */
+export function bookingNextStep(b: PartyBooking): {
+  title: string; body: string; action: 'PAY' | 'CONFIRM_COUNT' | null;
+} | null {
+  if (b.money.amount_outstanding > 0 && b.payment_position.next_due) {
+    const due = b.payment_position.next_due;
+    const overdue = b.payment_position.milestones.some((m) => m.is_overdue);
+    return {
+      title: overdue ? 'A payment is overdue' : `${due.name} is due`,
+      body: `${formatMoney(due.amount, 2)}`
+        + (due.due_date ? ` by ${String(due.due_date).slice(0, 10)}` : '')
+        + (due.due_label ? ` (${due.due_label})` : ''),
+      action: 'PAY',
+    };
+  }
+  if (b.guests.can_still_change && !b.guests.final_count_confirmed_at) {
+    return {
+      title: 'Confirm your final guest count',
+      body: b.guests.final_count_deadline
+        ? `By ${new Date(b.guests.final_count_deadline).toLocaleString()}. `
+          + `Without it we prepare for the guaranteed ${b.guests.guaranteed}.`
+        : `We will prepare for the guaranteed ${b.guests.guaranteed} until you tell us otherwise.`,
+      action: 'CONFIRM_COUNT',
+    };
+  }
+  return null;
 }
