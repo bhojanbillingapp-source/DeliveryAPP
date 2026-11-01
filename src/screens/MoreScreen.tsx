@@ -47,6 +47,16 @@ export default function MoreScreen({ navigation }: Props) {
         <Text style={styles.rowText}>Orders</Text>
         <Text style={styles.arrow}>›</Text>
       </TouchableOpacity>
+      {/* FR-PO-034: Party Orders reachable from the main navigation.
+          Browsing needs no account, so this row never asks them to sign in. */}
+      <TouchableOpacity
+        style={styles.row}
+        activeOpacity={0.75}
+        onPress={() => navigation.navigate(customer ? 'PartyEnquiries' : 'PartyPackages')}
+      >
+        <Text style={styles.rowText}>Party Orders</Text>
+        <Text style={styles.arrow}>›</Text>
+      </TouchableOpacity>
       <TouchableOpacity
         style={styles.row}
         activeOpacity={0.75}

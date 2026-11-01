@@ -26,4 +26,14 @@ export type AppStackParamList = {
   ForgotPassword: undefined;
   Notifications: undefined;
   SelectOutlet: undefined;
+
+  // 7.35 Party Order Management — the customer surface (BRD group C, and the
+  // customer half of E, F and G).
+  PartyPackages: undefined;
+  // `enquiryId` edits an existing enquiry; `packageId` pre-selects a package
+  // the customer tapped "Enquire" on.
+  PartyEnquiryForm: { packageId?: string; enquiryId?: string } | undefined;
+  PartyEnquiries: undefined;
+  PartyEnquiryDetail: { enquiryId: string };
+  PartyQuotation: { quotationId: string };
 };

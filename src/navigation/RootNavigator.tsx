@@ -26,6 +26,11 @@ import DeliveryChatScreen from '../screens/DeliveryChatScreen';
 import ProfileScreen from '../screens/ProfileScreen';
 import NotificationsScreen from '../screens/NotificationsScreen';
 import SelectOutletScreen from '../screens/SelectOutletScreen';
+import PartyPackagesScreen from '../screens/PartyPackagesScreen';
+import PartyEnquiryFormScreen from '../screens/PartyEnquiryFormScreen';
+import PartyEnquiriesScreen from '../screens/PartyEnquiriesScreen';
+import PartyEnquiryDetailScreen from '../screens/PartyEnquiryDetailScreen';
+import PartyQuotationScreen from '../screens/PartyQuotationScreen';
 import CartBar from '../components/CartBar';
 import { HomeIcon, MenuIcon, BagIcon, MoreIcon } from '../components/TabIcons';
 import { navigationRef } from './navigationRef';
@@ -111,6 +116,12 @@ export default function RootNavigator() {
               <AppStack.Screen name="Profile" component={ProfileScreen} />
               <AppStack.Screen name="Notifications" component={NotificationsScreen} />
               <AppStack.Screen name="SelectOutlet" component={SelectOutletScreen} />
+              {/* Party Orders — browsing works signed out; the rest gates itself. */}
+              <AppStack.Screen name="PartyPackages" component={PartyPackagesScreen} />
+              <AppStack.Screen name="PartyEnquiryForm" component={PartyEnquiryFormScreen} />
+              <AppStack.Screen name="PartyEnquiries" component={PartyEnquiriesScreen} />
+              <AppStack.Screen name="PartyEnquiryDetail" component={PartyEnquiryDetailScreen} />
+              <AppStack.Screen name="PartyQuotation" component={PartyQuotationScreen} />
               <AppStack.Screen name="Login" component={LoginScreen} />
               <AppStack.Screen name="Signup" component={SignupScreen} />
               <AppStack.Screen name="ForgotPassword" component={ForgotPasswordScreen} />
