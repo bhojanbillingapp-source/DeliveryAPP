@@ -278,14 +278,14 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: spacing.lg },
   scroll: { padding: spacing.md, gap: spacing.md, paddingBottom: spacing.xl },
-  errorText: { fontSize: 14, color: colors.danger, textAlign: 'center' },
+  errorText: { fontSize: 14, color: colors.danger, textAlign: 'center', includeFontPadding: false },
 
   cancelledBox: {
     backgroundColor: statusColors.CANCELLED.bg, borderRadius: radius.md,
     padding: spacing.sm, gap: 2,
   },
-  cancelledTitle: { fontSize: 13.5, fontWeight: '700', color: statusColors.CANCELLED.fg },
-  cancelledBody: { fontSize: 12.5, color: statusColors.CANCELLED.fg, lineHeight: 18 },
+  cancelledTitle: { fontSize: 13.5, fontWeight: '700', color: statusColors.CANCELLED.fg, includeFontPadding: false },
+  cancelledBody: { fontSize: 12.5, color: statusColors.CANCELLED.fg, lineHeight: 18, includeFontPadding: false },
 
   doc: {
     backgroundColor: colors.surface, borderRadius: radius.lg,
@@ -298,44 +298,46 @@ const styles = StyleSheet.create({
   docType: {
     fontSize: 12, fontWeight: '700', color: colors.textMuted,
     textTransform: 'uppercase', letterSpacing: 0.6,
+    includeFontPadding: false,
   },
-  docNumber: { fontSize: 20, fontWeight: '800', color: colors.text },
-  docDate: { fontSize: 11.5, color: colors.textMuted },
+  docNumber: { fontSize: 20, fontWeight: '800', color: colors.text, includeFontPadding: false },
+  docDate: { fontSize: 11.5, color: colors.textMuted, includeFontPadding: false },
 
   block: { gap: 2 },
   blockHead: {
     fontSize: 10.5, fontWeight: '700', color: colors.textMuted,
     textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 2,
+    includeFontPadding: false,
   },
-  strong: { fontSize: 14, fontWeight: '700', color: colors.text },
-  line: { fontSize: 12.5, color: colors.text, lineHeight: 18 },
+  strong: { fontSize: 14, fontWeight: '700', color: colors.text, includeFontPadding: false },
+  line: { fontSize: 12.5, color: colors.text, lineHeight: 18, includeFontPadding: false },
 
   lineRow: {
     flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm, paddingVertical: 4,
   },
   lineMain: { flex: 1, gap: 1 },
-  lineName: { fontSize: 13.5, fontWeight: '600', color: colors.text },
-  lineMeta: { fontSize: 11.5, color: colors.textMuted },
-  lineValue: { fontSize: 13.5, fontWeight: '600', color: colors.text },
+  lineName: { fontSize: 13.5, fontWeight: '600', color: colors.text, includeFontPadding: false },
+  lineMeta: { fontSize: 11.5, color: colors.textMuted, includeFontPadding: false },
+  lineValue: { fontSize: 13.5, fontWeight: '600', color: colors.text, includeFontPadding: false },
 
   totals: {
     gap: 4, borderTopWidth: 1, borderTopColor: colors.border, paddingTop: spacing.sm,
   },
   totalRow: { flexDirection: 'row', justifyContent: 'space-between', gap: spacing.sm },
-  totalLabel: { flex: 1, fontSize: 12.5, color: colors.textMuted },
-  totalValue: { fontSize: 13, fontWeight: '600', color: colors.text },
+  totalLabel: { flex: 1, fontSize: 12.5, color: colors.textMuted, includeFontPadding: false },
+  totalValue: { fontSize: 13, fontWeight: '600', color: colors.text, includeFontPadding: false },
   grandRow: {
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline',
     borderTopWidth: 1, borderTopColor: colors.border, paddingTop: 7, marginTop: 3,
   },
-  grandLabel: { fontSize: 14.5, fontWeight: '700', color: colors.text },
-  grandValue: { fontSize: 22, fontWeight: '800', color: colors.text },
+  grandLabel: { fontSize: 14.5, fontWeight: '700', color: colors.text, includeFontPadding: false },
+  grandValue: { fontSize: 22, fontWeight: '800', color: colors.text, includeFontPadding: false },
 
-  sac: { fontSize: 11, color: colors.textMuted },
-  irn: { fontSize: 10.5, color: colors.textMuted },
+  sac: { fontSize: 11, color: colors.textMuted, includeFontPadding: false },
+  irn: { fontSize: 10.5, color: colors.textMuted, includeFontPadding: false },
 
   noteBox: {
     backgroundColor: colors.iconBg, borderRadius: radius.md, padding: spacing.sm,
   },
-  noteText: { fontSize: 12.5, color: colors.text, lineHeight: 18 },
+  noteText: { fontSize: 12.5, color: colors.text, lineHeight: 18, includeFontPadding: false },
 });

@@ -27,13 +27,14 @@ import {
   type PartyAvailability, type PartyCatalogue, type PartyPackage,
   type ServiceMode,
   checkPartyAvailability, createPartyEnquiry, fetchIndicativePrice,
-  fetchPartyCatalogue, formatMoney, joinPartyWaitlist,
+  fetchPartyCatalogue, formatMoney, getPartyRebookPrefill, joinPartyWaitlist,
 } from '../api/party';
 
 type Props = NativeStackScreenProps<AppStackParamList, 'PartyEnquiryForm'>;
 
 export default function PartyEnquiryFormScreen({ navigation, route }: Props) {
   const presetPackageId = route.params?.packageId ?? null;
+  const rebookFrom = route.params?.rebookFromBookingId ?? null;
 
   const [catalogue, setCatalogue] = useState<PartyCatalogue | null>(null);
   const [loading, setLoading] = useState(true);
@@ -68,6 +69,50 @@ export default function PartyEnquiryFormScreen({ navigation, route }: Props) {
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+
+  /**
+   * FR-PO-210 — rebooking a past event.
+   *
+   * The menu and the preferences carry forward; the DATE deliberately does
+   * not, because that is the one thing the customer has to choose again. A
+   * customer who told us about an allergy last year should not have to again,
+   * which is the whole value of the feature.
+   */
+  const [rebookNote, setRebookNote] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!rebookFrom) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const prefill = await getPartyRebookPrefill(rebookFrom);
+        if (cancelled) return;
+        const e = prefill.enquiry as Record<string, any>;
+        if (e.event_type) setEventType(String(e.event_type));
+        if (e.event_type_other) setEventTypeOther(String(e.event_type_other));
+        if (e.event_start_time) setStartTime(String(e.event_start_time).slice(0, 5));
+        if (e.duration_minutes) setDuration(String(e.duration_minutes));
+        if (e.meal_period) setMealPeriod(e.meal_period as MealPeriod);
+        if (e.guest_count) setGuestCount(String(e.guest_count));
+        if (e.service_mode) setServiceMode(e.service_mode as ServiceMode);
+        if (e.event_address) setAddress(String(e.event_address));
+        if (e.veg_guest_count) setVegCount(String(e.veg_guest_count));
+        if (e.nonveg_guest_count) setNonVegCount(String(e.nonveg_guest_count));
+        if (e.allergen_notes) setAllergenNotes(String(e.allergen_notes));
+        if (e.special_instructions) setInstructions(String(e.special_instructions));
+        if (e.customer_email) setEmail(String(e.customer_email));
+        if (prefill.packages[0]?.package_id) {
+          setPackageId(prefill.packages[0].package_id);
+        }
+        setRebookNote(prefill.note);
+      } catch {
+        // A prefill that cannot be loaded is not a reason to block a new
+        // enquiry — the form still works, it just starts empty.
+        setRebookNote(null);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [rebookFrom]);
 
   useEffect(() => {
     (async () => {
@@ -301,6 +346,12 @@ export default function PartyEnquiryFormScreen({ navigation, route }: Props) {
       <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
         {error ? (
           <View style={styles.errorBox}><Text style={styles.errorText}>{error}</Text></View>
+        ) : null}
+
+        {rebookNote ? (
+          <View style={styles.rebookBox}>
+            <Text style={styles.rebookText}>{rebookNote}</Text>
+          </View>
         ) : null}
 
         {/* ---------------- the occasion ---------------- */}
@@ -742,21 +793,22 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderColor: colors.border,
     padding: spacing.md, gap: 9,
   },
-  sectionTitle: { fontSize: 15.5, fontWeight: '700', color: colors.text },
+  sectionTitle: { fontSize: 15.5, fontWeight: '700', color: colors.text, includeFontPadding: false },
 
   field: { flexGrow: 1, flexShrink: 1, flexBasis: 120, gap: 4 },
   row: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
-  label: { fontSize: 11.5, fontWeight: '700', color: colors.textMuted, textTransform: 'uppercase' },
+  label: { fontSize: 11.5, fontWeight: '700', color: colors.textMuted, textTransform: 'uppercase', includeFontPadding: false },
   input: {
     height: 44, borderWidth: 1, borderColor: colors.border, borderRadius: radius.sm,
     paddingHorizontal: 12, fontSize: 14.5, color: colors.text, backgroundColor: colors.surface,
+    includeFontPadding: false,
   },
   inputMultiline: {
     height: undefined, minHeight: 76, paddingTop: 11, paddingBottom: 11, textAlignVertical: 'top',
   },
   inputError: { borderColor: colors.danger },
-  fieldError: { fontSize: 11.5, color: colors.danger },
-  hint: { fontSize: 12, color: colors.textMuted, lineHeight: 17 },
+  fieldError: { fontSize: 11.5, color: colors.danger, includeFontPadding: false },
+  hint: { fontSize: 12, color: colors.textMuted, lineHeight: 17, includeFontPadding: false },
 
   chipWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 7 },
   chip: {
@@ -769,41 +821,50 @@ const styles = StyleSheet.create({
   },
   chipOn: { backgroundColor: colors.primary, borderColor: colors.primary },
   chipOff: { opacity: 0.45 },
-  chipText: { fontSize: 13, fontWeight: '600', color: colors.text },
+  chipText: { fontSize: 13, fontWeight: '600', color: colors.text, includeFontPadding: false },
   chipTextOn: { color: colors.surface },
   chipTextOff: { color: colors.textMuted },
-  allergenTag: { fontSize: 10, color: colors.warning },
+  allergenTag: { fontSize: 10, color: colors.warning, includeFontPadding: false },
 
   courses: { gap: 11, borderTopWidth: 1, borderTopColor: colors.border, paddingTop: 10 },
   course: { gap: 5 },
-  courseName: { fontSize: 13.5, fontWeight: '700', color: colors.text },
+  courseName: { fontSize: 13.5, fontWeight: '700', color: colors.text, includeFontPadding: false },
   courseNameShort: { color: colors.warning },
-  courseLimit: { fontSize: 11.5, fontWeight: '500', color: colors.textMuted },
+  courseLimit: { fontSize: 11.5, fontWeight: '500', color: colors.textMuted, includeFontPadding: false },
 
   okBox: {
     backgroundColor: statusColors.CLOSED.bg, borderRadius: radius.sm, padding: spacing.sm,
   },
-  okText: { fontSize: 13, fontWeight: '600', color: statusColors.CLOSED.fg, lineHeight: 18 },
+  okText: { fontSize: 13, fontWeight: '600', color: statusColors.CLOSED.fg, lineHeight: 18, includeFontPadding: false },
   warnBox: {
     backgroundColor: statusColors.OPEN.bg, borderRadius: radius.sm, padding: spacing.sm, gap: 3,
   },
-  warnText: { fontSize: 13, fontWeight: '600', color: statusColors.OPEN.fg, lineHeight: 18 },
+  warnText: { fontSize: 13, fontWeight: '600', color: statusColors.OPEN.fg, lineHeight: 18, includeFontPadding: false },
+  rebookBox: {
+    borderWidth: 1, borderColor: colors.primary, borderRadius: radius.sm,
+    backgroundColor: '#F5F7FC', padding: spacing.sm,
+  },
+  rebookText: {
+    fontSize: 12.5, fontWeight: '500', lineHeight: 18,
+    color: colors.primary, includeFontPadding: false,
+  },
+
   errorBox: {
     backgroundColor: statusColors.CANCELLED.bg, borderRadius: radius.md, padding: spacing.sm,
   },
-  errorText: { fontSize: 13, color: statusColors.CANCELLED.fg, lineHeight: 18 },
+  errorText: { fontSize: 13, color: statusColors.CANCELLED.fg, lineHeight: 18, includeFontPadding: false },
 
   indicativeBox: {
     backgroundColor: colors.iconBg, borderRadius: radius.md, padding: spacing.sm, gap: 3,
   },
-  indicativeAmount: { fontSize: 19, fontWeight: '800', color: colors.text },
-  indicativeNote: { fontSize: 11.5, color: colors.textMuted, lineHeight: 16 },
-  indicativeExcludes: { fontSize: 11, color: colors.textMuted, lineHeight: 15 },
+  indicativeAmount: { fontSize: 19, fontWeight: '800', color: colors.text, includeFontPadding: false },
+  indicativeNote: { fontSize: 11.5, color: colors.textMuted, lineHeight: 16, includeFontPadding: false },
+  indicativeExcludes: { fontSize: 11, color: colors.textMuted, lineHeight: 15, includeFontPadding: false },
 
-  termsHeading: { fontSize: 13, fontWeight: '700', color: colors.text, marginTop: 3 },
-  termsBody: { fontSize: 12.5, color: colors.textMuted, lineHeight: 19 },
+  termsHeading: { fontSize: 13, fontWeight: '700', color: colors.text, marginTop: 3, includeFontPadding: false },
+  termsBody: { fontSize: 12.5, color: colors.textMuted, lineHeight: 19, includeFontPadding: false },
   switchRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingTop: 4 },
-  switchLabel: { flex: 1, fontSize: 13, color: colors.text, lineHeight: 18 },
+  switchLabel: { flex: 1, fontSize: 13, color: colors.text, lineHeight: 18, includeFontPadding: false },
 
   footer: {
     flexDirection: 'row', gap: spacing.sm, padding: spacing.md,
@@ -813,17 +874,17 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderColor: colors.border, borderRadius: radius.pill,
     paddingHorizontal: 18, paddingVertical: 14, justifyContent: 'center',
   },
-  draftBtnText: { fontSize: 14, fontWeight: '600', color: colors.text },
+  draftBtnText: { fontSize: 14, fontWeight: '600', color: colors.text, includeFontPadding: false },
   sendBtn: {
     flex: 1, backgroundColor: colors.accent, borderRadius: radius.pill,
     paddingVertical: 14, alignItems: 'center', justifyContent: 'center',
   },
   sendBtnOff: { opacity: 0.5 },
-  sendBtnText: { fontSize: 15, fontWeight: '700', color: colors.surface },
+  sendBtnText: { fontSize: 15, fontWeight: '700', color: colors.surface, includeFontPadding: false },
 
   secondaryBtn: {
     borderWidth: 1, borderColor: colors.primary, borderRadius: radius.pill,
     paddingVertical: 11, alignItems: 'center',
   },
-  secondaryBtnText: { fontSize: 13.5, fontWeight: '700', color: colors.primary },
+  secondaryBtnText: { fontSize: 13.5, fontWeight: '700', color: colors.primary, includeFontPadding: false },
 });

@@ -31,7 +31,9 @@ import {
   // refund has got to.
   type PartyChange,
   type PartyRefund,
+  type PartySettlement,
   changeNextStep,
+  getPartySettlement,
   confirmPartyChange,
   getPartyChanges,
   getPartyRefunds,
@@ -57,18 +59,23 @@ export default function PartyBookingScreen({ navigation, route }: Props) {
      things they need to see without going looking. */
   const [changes, setChanges] = useState<PartyChange[]>([]);
   const [refunds, setRefunds] = useState<PartyRefund[]>([]);
+  /* Groups L and M: the event is worth watching while it is on, and the final
+     bill is the thing the customer comes back for afterwards. */
+  const [settlement, setSettlement] = useState<PartySettlement | null>(null);
 
   const load = useCallback(async () => {
     setError(null);
     try {
-      const [b, c, r] = await Promise.all([
+      const [b, c, r, s] = await Promise.all([
         fetchPartyBooking(bookingId),
         getPartyChanges(bookingId).catch(() => []),
         getPartyRefunds(bookingId).catch(() => []),
+        getPartySettlement(bookingId).catch(() => ({ settlement: null, message: null })),
       ]);
       setBooking(b);
       setChanges(c);
       setRefunds(r);
+      setSettlement(s.settlement);
     } catch (err: any) {
       setError(err.message || 'Could not load your booking');
     } finally {
@@ -536,6 +543,56 @@ export default function PartyBookingScreen({ navigation, route }: Props) {
           </View>
         ) : null}
 
+        {/* ---------------- group L: watch it happen (FR-PO-197) ---------- */}
+        {['LOCKED_FOR_PRODUCTION', 'IN_PRODUCTION', 'DISPATCHED', 'IN_SERVICE']
+          .includes(booking.booking_status) ? (
+            <TouchableOpacity
+              style={[styles.card, styles.cardAction]}
+              activeOpacity={0.85}
+              onPress={() => navigation.navigate('PartyEvent', { bookingId })}
+            >
+              <Text style={styles.cardTitle}>Follow your event</Text>
+              <Text style={styles.cardHint}>
+                {booking.booking_status === 'DISPATCHED'
+                  ? 'Your order is on the way — see where it is.'
+                  : 'See how your event is progressing, stage by stage.'}
+              </Text>
+            </TouchableOpacity>
+          ) : null}
+
+        {/* ---------------- group M: the final bill (FR-PO-200) ----------- */}
+        {settlement ? (
+          <TouchableOpacity
+            style={[
+              styles.card,
+              settlement.can_agree ? styles.cardAction : null,
+            ]}
+            activeOpacity={0.85}
+            onPress={() => navigation.navigate('PartySettlement', { bookingId })}
+          >
+            <Text style={styles.cardTitle}>
+              {settlement.status === 'SETTLED' ? 'Your final bill' : 'Your final bill is ready'}
+            </Text>
+            <Text style={styles.cardHint}>{settlement.statement.summary}</Text>
+            {settlement.can_agree ? (
+              <Text style={styles.settlePrompt}>
+                Tap to look it over and agree it. You can query any line.
+              </Text>
+            ) : null}
+          </TouchableOpacity>
+        ) : booking.booking_status === 'COMPLETED' ? (
+          <TouchableOpacity
+            style={styles.card}
+            activeOpacity={0.85}
+            onPress={() => navigation.navigate('PartySettlement', { bookingId })}
+          >
+            <Text style={styles.cardTitle}>How was your event?</Text>
+            <Text style={styles.cardHint}>
+              Leave feedback, and see your final bill when it is ready.
+            </Text>
+          </TouchableOpacity>
+        ) : null}
+
         {/* ---------------- group K: the way out (FR-PO-170/173) ---------- */}
         {!['COMPLETED', 'CANCELLED'].includes(booking.booking_status) ? (
           <TouchableOpacity
@@ -647,6 +704,10 @@ const styles = StyleSheet.create({
   cancelLinkText: {
     fontSize: 14.5, fontWeight: '600', lineHeight: 20,
     color: colors.danger, includeFontPadding: false,
+  },
+  settlePrompt: {
+    fontSize: 12.5, fontWeight: '600', lineHeight: 18,
+    color: colors.accent, includeFontPadding: false, marginTop: spacing.xs,
   },
   cancelLinkHint: {
     fontSize: 12.5, fontWeight: '400', lineHeight: 18,

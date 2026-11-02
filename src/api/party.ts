@@ -1242,3 +1242,368 @@ export function changeNextStep(c: PartyChange): {
   }
   return null;
 }
+
+/* ================================================================== */
+/* GROUPS L and M — watching the event, the final bill, feedback        */
+/*                                                                     */
+/* FR-PO-197 (the stages), 200 (the statement), 201 (querying a line),  */
+/* 206/207 (feedback), 209/210 (history and rebooking).                 */
+/* ================================================================== */
+
+/**
+ * FR-PO-197 — where the event has got to.
+ *
+ * Stages, not the kitchen's instructions. The live position carries its own
+ * AGE: a pin with no age shown is a pin the customer assumes is current, and
+ * an hour-old one then reads as "five minutes away".
+ */
+export interface PartyEventStatus {
+  booking_no: string;
+  status: string;
+  status_label: string;
+  is_off_premise: boolean;
+  stages: { label: string; at: string | null; done: boolean }[];
+  current: string | null;
+  next: string | null;
+  live_location: {
+    latitude: number;
+    longitude: number;
+    at: string;
+    age_minutes: number;
+    is_stale: boolean;
+    eta_minutes: number | null;
+  } | null;
+  vehicle: {
+    vehicle_no: string | null;
+    driver_name: string | null;
+    driver_mobile: string | null;
+  } | null;
+  handover: { contact_name: string; acknowledged: boolean } | null;
+  /** Only incidents the restaurant marked visible (FR-PO-222). */
+  incidents: {
+    incident_id: string;
+    incident_type: string;
+    description: string;
+    occurred_at: string;
+    resolution: string | null;
+  }[];
+}
+
+export const getPartyEventStatus = (bookingId: string) =>
+  unwrap<PartyEventStatus>(api.get(`${BASE}/bookings/${bookingId}/event-status`));
+
+/* ---------------- FR-PO-200/201 — the final bill ---------------- */
+
+export interface StatementLine {
+  key: string;
+  label: string;
+  detail: string | null;
+  amount: number;
+}
+
+export interface StatementSection {
+  key: string;
+  title: string;
+  lines: StatementLine[];
+  subtotal: number;
+}
+
+export interface PartySettlementStatement {
+  booking_no: string;
+  quotation_no: string;
+  event_date: string;
+  customer_name: string;
+  counts: {
+    quoted: number;
+    guaranteed: number;
+    final_confirmed: number | null;
+    actual: number | null;
+    billable: number;
+    /** Why they are billed for a number that is not the number who came. */
+    basis: string;
+  };
+  sections: StatementSection[];
+  totals: {
+    taxable_value: number;
+    tax_amount: number;
+    final_value: number;
+    already_paid: number;
+    already_refunded: number;
+    balance: number;
+    balance_direction: 'PAYABLE' | 'REFUNDABLE' | 'NIL';
+  };
+  deposit: {
+    paid: number; returned: number; forfeited: number;
+    outstanding: number; note: string | null;
+  };
+  summary: string;
+}
+
+export interface PartySettlementQuery {
+  dispute_id: string;
+  line_label: string | null;
+  query: string;
+  status: 'OPEN' | 'RESPONDED' | 'RESOLVED' | 'WITHDRAWN';
+  raised_at: string;
+  response: string | null;
+  responded_at: string | null;
+  resolution: string | null;
+  adjustment_amount: number;
+}
+
+export interface PartySettlement {
+  settlement_id: string;
+  settlement_no: string;
+  status: 'PRESENTED' | 'DISPUTED' | 'AGREED' | 'SETTLED';
+  status_label: string;
+  presented_at: string | null;
+  agreed_at: string | null;
+  settled_at: string | null;
+  invoice_no: string | null;
+  statement: PartySettlementStatement;
+  balance: number;
+  balance_direction: 'PAYABLE' | 'REFUNDABLE' | 'NIL';
+  final_value: number;
+  queries: PartySettlementQuery[];
+  can_agree: boolean;
+  can_query: boolean;
+}
+
+/**
+ * FR-PO-200. Returns `{ settlement: null }` while the statement is still a
+ * draft: it has not been checked, and showing a customer a number that then
+ * changes is worse than showing them nothing.
+ */
+export async function getPartySettlement(bookingId: string) {
+  try {
+    const { data } = await api.get(`${BASE}/bookings/${bookingId}/settlement`);
+    return {
+      settlement: (data.data as PartySettlement | null) ?? null,
+      message: (data.message as string | undefined) ?? null,
+    };
+  } catch (err) {
+    throw toPartyError(err);
+  }
+}
+
+/** FR-PO-201 — query a line of the statement you were shown. */
+export async function queryPartySettlementLine(
+  settlementId: string,
+  payload: { line_key?: string; query: string },
+) {
+  try {
+    const { data } = await api.post(
+      `${BASE}/settlements/${settlementId}/queries`, payload,
+    );
+    return {
+      query: data.data as { dispute_id: string; line_label: string | null; status: string },
+      message: data.message as string,
+    };
+  } catch (err) {
+    throw toPartyError(err);
+  }
+}
+
+export async function agreePartySettlement(settlementId: string) {
+  try {
+    const { data } = await api.post(`${BASE}/settlements/${settlementId}/agree`);
+    return {
+      result: data.data as {
+        status: string; status_label: string;
+        balance: number; balance_direction: string;
+      },
+      message: data.message as string,
+    };
+  } catch (err) {
+    throw toPartyError(err);
+  }
+}
+
+/* ---------------- FR-PO-206/207/213 — feedback ---------------- */
+
+export interface PartyFeedbackState {
+  submitted: boolean;
+  submitted_at?: string;
+  scores?: {
+    food: number | null; service: number | null; timeliness: number | null;
+    value: number | null; overall: number;
+  };
+  comment?: string | null;
+  photos?: { url: string; caption?: string }[];
+  photo_consent?: boolean;
+}
+
+export interface FeedbackDimension {
+  key: 'food' | 'service' | 'timeliness' | 'value' | 'overall';
+  label: string;
+  required?: boolean;
+}
+
+/**
+ * The dimensions come from the server rather than being hard-coded, so the
+ * five FR-PO-206 names stay in one place.
+ */
+export async function getPartyFeedback(bookingId: string) {
+  try {
+    const { data } = await api.get(`${BASE}/bookings/${bookingId}/feedback`);
+    return {
+      feedback: data.data as PartyFeedbackState,
+      dimensions: data.dimensions as FeedbackDimension[],
+    };
+  } catch (err) {
+    throw toPartyError(err);
+  }
+}
+
+/**
+ * FR-PO-206/207. Submitted once — the scores and the comment are then the
+ * customer's own words and immutable, which the database enforces.
+ *
+ * FR-PO-213: a satisfied customer may be offered a public review, and the
+ * channel comes back with the response rather than being assumed.
+ */
+export async function submitPartyFeedback(
+  bookingId: string,
+  payload: {
+    scores: {
+      overall: number;
+      food?: number; service?: number; timeliness?: number; value?: number;
+    };
+    comment?: string;
+    photos?: { url: string; caption?: string }[];
+    photo_consent?: boolean;
+  },
+) {
+  try {
+    const { data } = await api.post(`${BASE}/bookings/${bookingId}/feedback`, payload);
+    return {
+      submitted: data.data as { submitted_at: string; score_overall: number },
+      review_request: (data.review_request as { channel: string; url: string | null } | null) ?? null,
+      message: data.message as string,
+    };
+  } catch (err) {
+    throw toPartyError(err);
+  }
+}
+
+/* ---------------- FR-PO-209/210 — history and rebooking ---------------- */
+
+export interface PartyHistoryEvent {
+  booking_id: string;
+  booking_no: string;
+  event_date: string;
+  event_type: string | null;
+  guests: number;
+  packages: string | null;
+  value: number;
+  status: string;
+  my_score: number | null;
+}
+
+export async function getMyPartyHistory() {
+  try {
+    const { data } = await api.get(`${BASE}/history`);
+    return data.data as {
+      events: PartyHistoryEvent[];
+      events_count: number;
+      first_event: string | null;
+      last_event: string | null;
+    };
+  } catch (err) {
+    throw toPartyError(err);
+  }
+}
+
+export interface PartyRebookPrefill {
+  source_booking_no: string;
+  source_event_date: string;
+  enquiry: Record<string, unknown>;
+  packages: { package_id: string; name: string }[];
+  addons: { addon_id: string; name: string; quantity: number }[];
+  note: string;
+}
+
+/**
+ * FR-PO-210 — the same again. A PREFILL, not a created enquiry: the date is
+ * still the customer's to choose, and an abandoned enquiry is a phantom in the
+ * restaurant's pipeline.
+ */
+export const getPartyRebookPrefill = (bookingId: string) =>
+  unwrap<PartyRebookPrefill>(api.get(`${BASE}/bookings/${bookingId}/rebook`));
+
+/* ---------------- Display helpers ---------------- */
+
+/**
+ * What the event status means to someone waiting for it.
+ *
+ * The tone matters: a customer whose food is late wants to know somebody knows
+ * where it is, not a status code.
+ */
+export function eventStatusHeadline(s: PartyEventStatus): {
+  title: string; body: string;
+} {
+  if (s.live_location && !s.live_location.is_stale) {
+    return {
+      title: s.current || 'On the way to you',
+      body: s.live_location.eta_minutes
+        ? `About ${s.live_location.eta_minutes} minutes away.`
+        : `Last seen ${s.live_location.age_minutes} minute(s) ago.`,
+    };
+  }
+  if (s.live_location?.is_stale) {
+    return {
+      title: s.current || 'On the way to you',
+      body: `The last position we have is ${s.live_location.age_minutes} minutes `
+        + 'old. Call us if you need a firmer time.',
+    };
+  }
+  if (s.current && s.next) {
+    return { title: s.current, body: `Next: ${s.next.toLowerCase()}.` };
+  }
+  if (s.current) return { title: s.current, body: 'Everything is on track.' };
+  return {
+    title: s.status_label,
+    body: s.next ? `Next: ${s.next.toLowerCase()}.` : 'We will keep this updated.',
+  };
+}
+
+/**
+ * Whether the customer has something to do about their final bill.
+ *
+ * Returned rather than rendered so the booking screen and the settlement
+ * screen say the same thing.
+ */
+export function settlementNextStep(s: PartySettlement): {
+  title: string; body: string; action: 'AGREE' | 'PAY' | null;
+} | null {
+  if (s.status === 'SETTLED') return null;
+  if (s.status === 'DISPUTED') {
+    return {
+      title: 'We are looking into your query',
+      body: 'Nothing will be collected while it is open.',
+      action: null,
+    };
+  }
+  if (s.status === 'PRESENTED') {
+    return {
+      title: 'Your final bill is ready',
+      body: s.statement.summary,
+      action: 'AGREE',
+    };
+  }
+  if (s.status === 'AGREED' && s.balance > 0) {
+    return {
+      title: `${formatMoney(s.balance, 2)} to pay`,
+      body: 'You can pay it here, the same way as your earlier payments.',
+      action: 'PAY',
+    };
+  }
+  if (s.status === 'AGREED' && s.balance < 0) {
+    return {
+      title: `${formatMoney(Math.abs(s.balance), 2)} coming back to you`,
+      body: 'The restaurant is processing your refund.',
+      action: null,
+    };
+  }
+  return null;
+}

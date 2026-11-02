@@ -32,7 +32,12 @@ export type AppStackParamList = {
   PartyPackages: undefined;
   // `enquiryId` edits an existing enquiry; `packageId` pre-selects a package
   // the customer tapped "Enquire" on.
-  PartyEnquiryForm: { packageId?: string; enquiryId?: string } | undefined;
+  PartyEnquiryForm: {
+    packageId?: string;
+    enquiryId?: string;
+    /** FR-PO-210: start from a past event, menu and preferences carried. */
+    rebookFromBookingId?: string;
+  } | undefined;
   PartyEnquiries: undefined;
   PartyEnquiryDetail: { enquiryId: string };
   PartyQuotation: { quotationId: string };
@@ -46,4 +51,11 @@ export type AppStackParamList = {
    * it afterwards to see where the money is.
    */
   PartyCancel: { bookingId: string };
+  /**
+   * Groups L and M. Both are their own route because both are opened
+   * repeatedly in the days around an event — watching it happen, and then
+   * settling it.
+   */
+  PartyEvent: { bookingId: string };
+  PartySettlement: { bookingId: string };
 };

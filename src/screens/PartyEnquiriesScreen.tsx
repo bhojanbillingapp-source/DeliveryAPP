@@ -233,7 +233,7 @@ const styles = StyleSheet.create({
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: spacing.md, padding: spacing.lg },
   list: { padding: spacing.md, paddingBottom: spacing.xl },
   sep: { height: spacing.sm },
-  headerLink: { fontSize: 13, fontWeight: '600', color: colors.primary },
+  headerLink: { fontSize: 13, fontWeight: '600', color: colors.primary, includeFontPadding: false },
 
   card: {
     backgroundColor: colors.surface, borderRadius: radius.lg,
@@ -243,40 +243,41 @@ const styles = StyleSheet.create({
   cardClosed: { opacity: 0.72 },
   cardTop: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm },
   cardTitleBlock: { flex: 1, gap: 2 },
-  cardTitle: { fontSize: 15.5, fontWeight: '700', color: colors.text },
-  cardRef: { fontSize: 11.5, color: colors.textMuted },
-  cardMeta: { fontSize: 13, color: colors.text, lineHeight: 18 },
+  cardTitle: { fontSize: 15.5, fontWeight: '700', color: colors.text, includeFontPadding: false },
+  cardRef: { fontSize: 11.5, color: colors.textMuted, includeFontPadding: false },
+  cardMeta: { fontSize: 13, color: colors.text, lineHeight: 18, includeFontPadding: false },
 
   pill: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: radius.pill },
-  pillText: { fontSize: 11.5, fontWeight: '700' },
+  pillText: { fontSize: 11.5, fontWeight: '700', includeFontPadding: false },
 
   moneyRow: { flexDirection: 'row', alignItems: 'baseline', gap: 6 },
-  money: { fontSize: 17, fontWeight: '800', color: colors.text },
-  moneyLabel: { fontSize: 11.5, color: colors.textMuted },
+  money: { fontSize: 17, fontWeight: '800', color: colors.text, includeFontPadding: false },
+  moneyLabel: { fontSize: 11.5, color: colors.textMuted, includeFontPadding: false },
 
   actionStrip: {
     backgroundColor: statusColors.OPEN.bg, borderRadius: radius.sm,
     paddingHorizontal: 10, paddingVertical: 8,
   },
-  actionStripText: { fontSize: 12.5, fontWeight: '700', color: statusColors.OPEN.fg },
+  actionStripText: { fontSize: 12.5, fontWeight: '700', color: statusColors.OPEN.fg, includeFontPadding: false },
 
-  prompt: { fontSize: 14, color: colors.textMuted, textAlign: 'center', lineHeight: 20 },
+  prompt: { fontSize: 14, color: colors.textMuted, textAlign: 'center', lineHeight: 20, includeFontPadding: false },
   primaryBtn: {
     backgroundColor: colors.accent, borderRadius: radius.pill,
     paddingHorizontal: 24, paddingVertical: 13,
   },
-  primaryBtnText: { fontSize: 14.5, fontWeight: '700', color: colors.surface },
+  primaryBtnText: { fontSize: 14.5, fontWeight: '700', color: colors.surface, includeFontPadding: false },
 
   errorBox: {
     backgroundColor: statusColors.CANCELLED.bg, borderRadius: radius.md,
     padding: spacing.sm, marginBottom: spacing.sm,
   },
-  errorText: { fontSize: 13, color: statusColors.CANCELLED.fg },
+  errorText: { fontSize: 13, color: statusColors.CANCELLED.fg, includeFontPadding: false },
 
   emptyBox: { alignItems: 'center', gap: spacing.sm, paddingVertical: spacing.xl },
-  emptyTitle: { fontSize: 16, fontWeight: '700', color: colors.text },
+  emptyTitle: { fontSize: 16, fontWeight: '700', color: colors.text, includeFontPadding: false },
   emptyBody: {
     fontSize: 13.5, color: colors.textMuted, textAlign: 'center',
     lineHeight: 20, maxWidth: 300,
+    includeFontPadding: false,
   },
 });
