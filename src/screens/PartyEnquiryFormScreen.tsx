@@ -25,9 +25,10 @@ import {
   MEAL_PERIOD_LABEL, SERVICE_MODE_LABEL,
   type EnquiryPayload, type IndicativePrice, type MealPeriod,
   type PartyAvailability, type PartyCatalogue, type PartyPackage,
-  type ServiceMode,
+  type PartySavedAddress, type ServiceMode,
   checkPartyAvailability, createPartyEnquiry, fetchIndicativePrice,
-  fetchPartyCatalogue, formatMoney, getPartyRebookPrefill, joinPartyWaitlist,
+  fetchPartyCatalogue, formatMoney, getPartyRebookPrefill,
+  getPartySavedAddresses, joinPartyWaitlist,
 } from '../api/party';
 
 type Props = NativeStackScreenProps<AppStackParamList, 'PartyEnquiryForm'>;
@@ -50,6 +51,7 @@ export default function PartyEnquiryFormScreen({ navigation, route }: Props) {
   const [guestMax, setGuestMax] = useState('');
   const [serviceMode, setServiceMode] = useState<ServiceMode | ''>('');
   const [address, setAddress] = useState('');
+  const [savedAddresses, setSavedAddresses] = useState<PartySavedAddress[]>([]);
   const [packageId, setPackageId] = useState<string | null>(presetPackageId);
   const [selection, setSelection] = useState<Record<string, string[]>>({});
   const [customRequirement, setCustomRequirement] = useState('');
@@ -79,6 +81,20 @@ export default function PartyEnquiryFormScreen({ navigation, route }: Props) {
    * which is the whole value of the feature.
    */
   const [rebookNote, setRebookNote] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const list = await getPartySavedAddresses();
+        if (!cancelled) setSavedAddresses(list);
+      } catch {
+        // Not signed in, or no addresses saved. Either way the typed field is
+        // the answer and nothing needs saying about it.
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
 
   useEffect(() => {
     if (!rebookFrom) return;
@@ -504,14 +520,40 @@ export default function PartyEnquiryFormScreen({ navigation, route }: Props) {
           {fieldErrors.service_mode ? <FieldError text={fieldErrors.service_mode} /> : null}
 
           {offPremise ? (
-            <Field
-              label="Event address"
-              value={address}
-              onChange={setAddress}
-              multiline
-              placeholder="Where should we deliver or cater?"
-              error={fieldErrors.event_address}
-            />
+            <>
+              {/* FR-PO-221: pick one of your saved addresses, or type a new
+                  one. The picker FILLS the field rather than replacing it,
+                  because an event is often at a venue that is nobody's saved
+                  address and the typed answer has to stay possible. */}
+              {savedAddresses.length ? (
+                <View style={styles.chipWrap}>
+                  {savedAddresses.map((a) => {
+                    const on = address.trim() === a.formatted;
+                    return (
+                      <TouchableOpacity
+                        key={a.address_id}
+                        style={[styles.chip, on && styles.chipOn]}
+                        onPress={() => setAddress(on ? '' : a.formatted)}
+                        activeOpacity={0.8}
+                      >
+                        <Text style={[styles.chipText, on && styles.chipTextOn]}>
+                          {a.label || a.city || 'Saved address'}
+                          {a.is_default ? ' · default' : ''}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              ) : null}
+              <Field
+                label="Event address"
+                value={address}
+                onChange={setAddress}
+                multiline
+                placeholder="Where should we deliver or cater?"
+                error={fieldErrors.event_address}
+              />
+            </>
           ) : null}
         </Section>
 
