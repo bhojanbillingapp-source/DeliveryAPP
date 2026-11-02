@@ -1607,3 +1607,196 @@ export function settlementNextStep(s: PartySettlement): {
   }
   return null;
 }
+
+/* ================================================================== */
+/* Group N — the application's own promises (FR-PO-214..224)           */
+/* ================================================================== */
+
+/* ---------------- FR-PO-214/215 — one timeline ---------------- */
+
+export type TimelineStage =
+  | 'STATUS' | 'CONFIRMATION' | 'PAYMENT' | 'DOCUMENT' | 'CHANGE'
+  | 'CANCELLATION' | 'SETTLEMENT' | 'EVENT' | 'FEEDBACK';
+
+export interface TimelineEntry {
+  at: string;
+  stage: TimelineStage;
+  /** Plain language. Never an internal status code (FR-PO-215). */
+  title: string;
+  detail: string | null;
+}
+
+export interface PartyOrderTimeline {
+  enquiry_id: string;
+  enquiry_no: string;
+  booking_id: string | null;
+  booking_no: string | null;
+  current_status: string;
+  entries: TimelineEntry[];
+  /** The last five, newest first, so a slow connection shows these first. */
+  latest: TimelineEntry[];
+}
+
+/**
+ * Every stage of one party order, with the date and time of each.
+ *
+ * One call rather than a timeline per record: the customer thinks of their
+ * party as one thing, and "is it still an enquiry or is it a booking?" is not
+ * a question they should have to answer to find out where it is.
+ */
+export const getPartyOrderTimeline = (enquiryId: string) =>
+  unwrap<PartyOrderTimeline>(api.get(`${BASE}/orders/${enquiryId}/timeline`));
+
+/* ---------------- FR-PO-217/242 — what we send you ---------------- */
+
+export type PartyNotificationChannel = 'IN_APP' | 'PUSH' | 'EMAIL' | 'SMS' | 'WHATSAPP';
+
+export interface PartyNotificationPreferences {
+  channels: { key: PartyNotificationChannel; label: string; available: boolean }[];
+  events: {
+    event_key: string;
+    label: string;
+    /** Cannot be turned off, and the screen shows why rather than hiding it. */
+    mandatory: boolean;
+    channels: Record<string, boolean>;
+  }[];
+  note: string;
+}
+
+export const getPartyNotificationPreferences = () =>
+  unwrap<PartyNotificationPreferences>(api.get(`${BASE}/notification-preferences`));
+
+export const setPartyNotificationPreference = (payload: {
+  event_key: string;
+  channel: PartyNotificationChannel;
+  enabled: boolean;
+}) => unwrap<unknown>(api.put(`${BASE}/notification-preferences`, payload));
+
+/* ---------------- FR-PO-221 — saved addresses ---------------- */
+
+export interface PartySavedAddress {
+  address_id: string;
+  label: string | null;
+  is_default: boolean;
+  /** One line, ready for the enquiry form's address field. */
+  formatted: string;
+  latitude: number | null;
+  longitude: number | null;
+  pin_code: string | null;
+  city: string | null;
+}
+
+/**
+ * The customer's own saved addresses.
+ *
+ * The same addresses the delivery side uses — a party module with its own
+ * address book would be a second place to correct a typo, and one of them
+ * would stay wrong.
+ */
+export const getPartySavedAddresses = () =>
+  unwrap<PartySavedAddress[]>(api.get(`${BASE}/addresses`));
+
+/* ---------------- FR-PO-223/266 — your data ---------------- */
+
+export interface PartyDataExport {
+  request_id: string;
+  exported_at: string;
+  counts: {
+    enquiries: number;
+    quotations: number;
+    bookings: number;
+    payments: number;
+    refunds: number;
+    documents: number;
+    feedback: number;
+    messages: number;
+  };
+  export: Record<string, any>;
+}
+
+export interface PartyErasureOutcome {
+  status: 'COMPLETED' | 'PARTIALLY_COMPLETED' | 'REFUSED' | 'RECEIVED';
+  outcome: string | null;
+  erased_enquiries: number;
+  retained_bookings: number;
+  retained_until: string | null;
+  retained_reason: string | null;
+}
+
+export const exportMyPartyData = () =>
+  unwrap<PartyDataExport>(api.post(`${BASE}/data/export`));
+
+/**
+ * Ask for the data to be erased.
+ *
+ * Can honestly come back REFUSED: a tax invoice inside its statutory
+ * retention period cannot be erased, and the answer carries the obligation
+ * and the date it expires. "Request submitted" followed by nothing happening
+ * would be the dishonest version of this.
+ */
+export const requestMyPartyErasure = (reason?: string) =>
+  unwrap<PartyErasureOutcome>(api.post(`${BASE}/data/erasure`, { reason }));
+
+/* ---------------- Reading help for the screens ---------------- */
+
+/** The icon family a timeline entry belongs to. */
+export function timelineTone(stage: TimelineStage): 'brand' | 'success' | 'warning' | 'muted' {
+  if (stage === 'PAYMENT' || stage === 'CONFIRMATION') return 'success';
+  if (stage === 'CANCELLATION') return 'warning';
+  if (stage === 'SETTLEMENT' || stage === 'DOCUMENT') return 'brand';
+  return 'muted';
+}
+
+/**
+ * A date and time a person reads rather than parses.
+ *
+ * Deliberately not "2 days ago": a timeline is read to answer "when exactly
+ * did that happen", and relative time is the one format that cannot answer it.
+ */
+export function timelineWhen(at: string): string {
+  const d = new Date(at);
+  if (Number.isNaN(d.getTime())) return String(at).slice(0, 16).replace('T', ' ');
+  return d.toLocaleString(undefined, {
+    day: 'numeric', month: 'short', year: 'numeric',
+    hour: '2-digit', minute: '2-digit',
+  });
+}
+
+/**
+ * What an erasure outcome should say to the person who asked for it.
+ *
+ * A refusal is not an error and must not read like one — the restaurant is
+ * obliged to keep the record, and the customer is entitled to know until
+ * when.
+ */
+export function erasureMessage(outcome: PartyErasureOutcome): {
+  title: string; body: string; tone: 'success' | 'warning';
+} {
+  if (outcome.status === 'COMPLETED') {
+    return {
+      title: 'Your personal details have been erased',
+      body: outcome.outcome
+        || 'Your name, number and notes have been removed. The invoices stay, '
+          + 'as the law requires, and are no longer attached to you.',
+      tone: 'success',
+    };
+  }
+  if (outcome.status === 'PARTIALLY_COMPLETED') {
+    return {
+      title: 'Partly done',
+      body: `${outcome.outcome || ''} ${
+        outcome.retained_until
+          ? `The rest can be erased after ${outcome.retained_until}.`
+          : ''
+      }`.trim(),
+      tone: 'warning',
+    };
+  }
+  return {
+    title: 'We cannot erase this yet',
+    body: `${outcome.outcome || outcome.retained_reason || ''} ${
+      outcome.retained_until ? `This applies until ${outcome.retained_until}.` : ''
+    }`.trim(),
+    tone: 'warning',
+  };
+}

@@ -36,6 +36,8 @@ import PartyDocumentScreen from '../screens/PartyDocumentScreen';
 import PartyCancelScreen from '../screens/PartyCancelScreen';
 import PartyEventScreen from '../screens/PartyEventScreen';
 import PartySettlementScreen from '../screens/PartySettlementScreen';
+import PartyTimelineScreen from '../screens/PartyTimelineScreen';
+import PartyPreferencesScreen from '../screens/PartyPreferencesScreen';
 import CartBar from '../components/CartBar';
 import { HomeIcon, MenuIcon, BagIcon, MoreIcon } from '../components/TabIcons';
 import { navigationRef } from './navigationRef';
@@ -132,6 +134,8 @@ export default function RootNavigator() {
               <AppStack.Screen name="PartyCancel" component={PartyCancelScreen} />
               <AppStack.Screen name="PartyEvent" component={PartyEventScreen} />
               <AppStack.Screen name="PartySettlement" component={PartySettlementScreen} />
+              <AppStack.Screen name="PartyTimeline" component={PartyTimelineScreen} />
+              <AppStack.Screen name="PartyPreferences" component={PartyPreferencesScreen} />
               <AppStack.Screen name="Login" component={LoginScreen} />
               <AppStack.Screen name="Signup" component={SignupScreen} />
               <AppStack.Screen name="ForgotPassword" component={ForgotPasswordScreen} />

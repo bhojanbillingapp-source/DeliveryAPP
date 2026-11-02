@@ -112,6 +112,9 @@ export default function PartyEnquiriesScreen({ navigation }: Props) {
           // Once confirmed, the booking is what the customer came back for.
           ? navigation.navigate('PartyBooking', { bookingId: item.booking_id })
           : navigation.navigate('PartyEnquiryDetail', { enquiryId: item.enquiry_id }))}
+        onLongPress={() => navigation.navigate('PartyTimeline', {
+          enquiryId: item.enquiry_id,
+        })}
       >
         <View style={styles.cardTop}>
           <View style={styles.cardTitleBlock}>
@@ -179,12 +182,21 @@ export default function PartyEnquiriesScreen({ navigation }: Props) {
         title="Party Orders"
         onBack={() => navigation.goBack()}
         right={(
-          <TouchableOpacity
-            onPress={() => navigation.navigate('PartyPackages')}
-            activeOpacity={0.75}
-          >
-            <Text style={styles.headerLink}>Browse packages</Text>
-          </TouchableOpacity>
+          <View style={styles.headerActions}>
+            <TouchableOpacity
+              onPress={() => navigation.navigate('PartyPreferences')}
+              activeOpacity={0.75}
+            >
+              {/* FR-PO-217/223: what we send you, and your data. */}
+              <Text style={styles.headerLink}>Messages</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={() => navigation.navigate('PartyPackages')}
+              activeOpacity={0.75}
+            >
+              <Text style={styles.headerLink}>Packages</Text>
+            </TouchableOpacity>
+          </View>
         )}
       />
 
@@ -233,6 +245,7 @@ const styles = StyleSheet.create({
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: spacing.md, padding: spacing.lg },
   list: { padding: spacing.md, paddingBottom: spacing.xl },
   sep: { height: spacing.sm },
+  headerActions: { flexDirection: 'row', gap: spacing.md, alignItems: 'center' },
   headerLink: { fontSize: 13, fontWeight: '600', color: colors.primary, includeFontPadding: false },
 
   card: {

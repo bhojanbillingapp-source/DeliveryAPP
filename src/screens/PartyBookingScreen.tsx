@@ -543,6 +543,21 @@ export default function PartyBookingScreen({ navigation, route }: Props) {
           </View>
         ) : null}
 
+        {/* ---------------- group N: the whole story (FR-PO-214) ---------- */}
+        <TouchableOpacity
+          style={styles.card}
+          activeOpacity={0.85}
+          onPress={() => navigation.navigate('PartyTimeline', {
+            enquiryId: booking.enquiry_id,
+          })}
+        >
+          <Text style={styles.cardTitle}>Everything that has happened</Text>
+          <Text style={styles.cardHint}>
+            Your enquiry, quotation, confirmation, payments, documents and the final
+            bill — in order, with the date and time of each.
+          </Text>
+        </TouchableOpacity>
+
         {/* ---------------- group L: watch it happen (FR-PO-197) ---------- */}
         {['LOCKED_FOR_PRODUCTION', 'IN_PRODUCTION', 'DISPATCHED', 'IN_SERVICE']
           .includes(booking.booking_status) ? (

@@ -58,4 +58,12 @@ export type AppStackParamList = {
    */
   PartyEvent: { bookingId: string };
   PartySettlement: { bookingId: string };
+  /**
+   * Group N (FR-PO-214). One timeline for the whole order, keyed on the
+   * ENQUIRY: it is the only id that exists at every stage, and the customer
+   * reaches this screen before there is a booking to key it on.
+   */
+  PartyTimeline: { enquiryId: string };
+  /** FR-PO-217/223: what we send you, and your data. */
+  PartyPreferences: undefined;
 };
