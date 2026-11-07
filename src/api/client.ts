@@ -25,10 +25,11 @@ api.interceptors.request.use(async config => {
   return config;
 });
 
-// Access tokens expire (15m by default) and there's no refresh-token flow —
-// AuthProvider registers a handler here so a 401 anywhere clears the stale
-// session and drops the user back to the login screen instead of leaving
-// them stuck looking at a raw "Invalid or expired token" error.
+// Access tokens are long-lived (30d, see customerAuth.service.js's
+// ACCOUNT_TOKEN_EXPIRY) and there's no refresh-token flow — AuthProvider
+// registers a handler here so a 401 anywhere (expiry, revocation) clears the
+// stale session and drops the user back to the login screen instead of
+// leaving them stuck looking at a raw "Invalid or expired token" error.
 let onUnauthorized: (() => void) | null = null;
 export function setUnauthorizedHandler(handler: (() => void) | null) {
   onUnauthorized = handler;

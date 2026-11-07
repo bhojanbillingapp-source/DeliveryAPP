@@ -88,13 +88,6 @@ export default function TrackOrderScreen({ navigation, route }: Props) {
   const status = info?.status ?? null;
   const isLive = !!info?.location && !info.isStale;
 
-  const callPartner = () => {
-    if (!info?.partnerPhoneMasked) return;
-    // The masked string isn't dialable — the backend exposes a tel: deep link
-    // only when it chooses to; fall back to nothing if absent.
-    Linking.openURL(`tel:${info.partnerPhoneMasked.replace(/[^\d+]/g, '')}`).catch(() => {});
-  };
-
   function callRider() {
     if (!info?.delivery_boy_phone) return;
     Linking.openURL(`tel:${info.delivery_boy_phone}`);
@@ -142,17 +135,6 @@ export default function TrackOrderScreen({ navigation, route }: Props) {
                   </TouchableOpacity>
                 </View>
               </>
-            )}
-
-            {!info?.delivery_boy_name && !!info?.partnerFirstName && (
-              <View style={styles.partnerRow}>
-                <Text style={styles.meta}>Delivery partner: {info.partnerFirstName}</Text>
-                {!!info.partnerPhoneMasked && (
-                  <TouchableOpacity onPress={callPartner}>
-                    <Text style={styles.callLink}>Call {info.partnerPhoneMasked}</Text>
-                  </TouchableOpacity>
-                )}
-              </View>
             )}
           </View>
 
@@ -221,6 +203,4 @@ const styles = StyleSheet.create({
   callButtonText: { color: '#fff', fontWeight: '700' },
   chatButton: { backgroundColor: colors.accent, borderRadius: radius.sm, padding: 14, alignItems: 'center' },
   chatButtonText: { color: '#fff', fontWeight: '700' },
-  partnerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 8 },
-  callLink: { fontSize: 13, color: colors.primary, fontWeight: '700' },
 });
